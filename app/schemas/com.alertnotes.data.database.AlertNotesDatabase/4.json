@@ -1,0 +1,370 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 4,
+    "identityHash": "eaff2fbbec5c9ab5d8778d9252f958e5",
+    "entities": [
+      {
+        "tableName": "reminders",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `title` TEXT NOT NULL, `description` TEXT NOT NULL, `type` TEXT NOT NULL, `drawing` TEXT, `is_enabled` INTEGER NOT NULL, `is_archived` INTEGER NOT NULL, `priority` TEXT NOT NULL, `theme` TEXT NOT NULL DEFAULT 'PRIMARY_ORANGE', `swipe_direction` TEXT NOT NULL DEFAULT 'UP', `display_mode` TEXT NOT NULL, `floating_position` TEXT NOT NULL, `floating_size` TEXT NOT NULL, `auto_dismiss_seconds` INTEGER, `acknowledgement` TEXT NOT NULL, `dismiss_countdown_seconds` INTEGER, `requires_biometric` INTEGER NOT NULL, `biometric_pin_fallback` INTEGER NOT NULL, `snooze_enabled` INTEGER NOT NULL, `snooze_durations_minutes` TEXT NOT NULL, `history_enabled` INTEGER NOT NULL, `vibration_enabled` INTEGER NOT NULL, `sound_enabled` INTEGER NOT NULL, `wake_screen` INTEGER NOT NULL, `show_on_lock_screen` INTEGER NOT NULL, `overlay_preference` TEXT NOT NULL, `recurrence_type` TEXT NOT NULL, `recurrence_trigger_at` INTEGER, `recurrence_interval_minutes` INTEGER, `recurrence_time_of_day_minutes` INTEGER, `recurrence_day_of_month` INTEGER, `active_days` INTEGER NOT NULL, `active_hours_start_minutes` INTEGER, `active_hours_end_minutes` INTEGER, `start_date` TEXT, `end_date` TEXT, `time_zone` TEXT NOT NULL, `next_trigger_at` INTEGER, `last_triggered_at` INTEGER, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "drawing",
+            "columnName": "drawing",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "isEnabled",
+            "columnName": "is_enabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isArchived",
+            "columnName": "is_archived",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "priority",
+            "columnName": "priority",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "theme",
+            "columnName": "theme",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'PRIMARY_ORANGE'"
+          },
+          {
+            "fieldPath": "swipeDirection",
+            "columnName": "swipe_direction",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'UP'"
+          },
+          {
+            "fieldPath": "displayMode",
+            "columnName": "display_mode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "floatingPosition",
+            "columnName": "floating_position",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "floatingSize",
+            "columnName": "floating_size",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "autoDismissSeconds",
+            "columnName": "auto_dismiss_seconds",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "acknowledgement",
+            "columnName": "acknowledgement",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "dismissCountdownSeconds",
+            "columnName": "dismiss_countdown_seconds",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "requiresBiometric",
+            "columnName": "requires_biometric",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "biometricPinFallback",
+            "columnName": "biometric_pin_fallback",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "snoozeEnabled",
+            "columnName": "snooze_enabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "snoozeDurationsMinutes",
+            "columnName": "snooze_durations_minutes",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "historyEnabled",
+            "columnName": "history_enabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "vibrationEnabled",
+            "columnName": "vibration_enabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "soundEnabled",
+            "columnName": "sound_enabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "wakeScreen",
+            "columnName": "wake_screen",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "showOnLockScreen",
+            "columnName": "show_on_lock_screen",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "overlayPreference",
+            "columnName": "overlay_preference",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recurrenceType",
+            "columnName": "recurrence_type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recurrenceTriggerAt",
+            "columnName": "recurrence_trigger_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "recurrenceIntervalMinutes",
+            "columnName": "recurrence_interval_minutes",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "recurrenceTimeOfDayMinutes",
+            "columnName": "recurrence_time_of_day_minutes",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "recurrenceDayOfMonth",
+            "columnName": "recurrence_day_of_month",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "activeDaysMask",
+            "columnName": "active_days",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "activeHoursStartMinutes",
+            "columnName": "active_hours_start_minutes",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "activeHoursEndMinutes",
+            "columnName": "active_hours_end_minutes",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "startDate",
+            "columnName": "start_date",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "endDate",
+            "columnName": "end_date",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "timeZone",
+            "columnName": "time_zone",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nextTriggerAt",
+            "columnName": "next_trigger_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "lastTriggeredAt",
+            "columnName": "last_triggered_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "createdAtMillis",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtMillis",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_reminders_is_enabled",
+            "unique": false,
+            "columnNames": [
+              "is_enabled"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_reminders_is_enabled` ON `${TABLE_NAME}` (`is_enabled`)"
+          },
+          {
+            "name": "index_reminders_next_trigger_at",
+            "unique": false,
+            "columnNames": [
+              "next_trigger_at"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_reminders_next_trigger_at` ON `${TABLE_NAME}` (`next_trigger_at`)"
+          },
+          {
+            "name": "index_reminders_updated_at",
+            "unique": false,
+            "columnNames": [
+              "updated_at"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_reminders_updated_at` ON `${TABLE_NAME}` (`updated_at`)"
+          }
+        ]
+      },
+      {
+        "tableName": "reminder_queue",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `reminder_id` INTEGER NOT NULL, `due_at` INTEGER NOT NULL, `enqueued_at` INTEGER NOT NULL, `priority_rank` INTEGER NOT NULL, `state` TEXT NOT NULL, FOREIGN KEY(`reminder_id`) REFERENCES `reminders`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "reminderId",
+            "columnName": "reminder_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "dueAtMillis",
+            "columnName": "due_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "enqueuedAtMillis",
+            "columnName": "enqueued_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "priorityRank",
+            "columnName": "priority_rank",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state",
+            "columnName": "state",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_reminder_queue_reminder_id",
+            "unique": false,
+            "columnNames": [
+              "reminder_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_reminder_queue_reminder_id` ON `${TABLE_NAME}` (`reminder_id`)"
+          },
+          {
+            "name": "index_reminder_queue_state",
+            "unique": false,
+            "columnNames": [
+              "state"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_reminder_queue_state` ON `${TABLE_NAME}` (`state`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "reminders",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "reminder_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'eaff2fbbec5c9ab5d8778d9252f958e5')"
+    ]
+  }
+}

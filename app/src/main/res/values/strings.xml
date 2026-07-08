@@ -1,0 +1,500 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Alert Notes</string>
+
+    <!-- Common actions -->
+    <string name="action_save">Save</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_delete">Delete</string>
+    <string name="action_done">Done</string>
+    <string name="action_undo">Undo</string>
+    <string name="action_duplicate">Duplicate</string>
+
+    <!-- Content descriptions -->
+    <string name="cd_navigate_back">Navigate back</string>
+    <string name="cd_clear_search">Clear search</string>
+    <string name="cd_toggle_reminder">Toggle reminder %1$s</string>
+    <string name="cd_reminder_actions">More actions for %1$s</string>
+    <string name="cd_sort_reminders">Sort reminders</string>
+
+    <!-- Navigation -->
+    <string name="nav_home">Home</string>
+    <string name="nav_calendar">Calendar</string>
+    <string name="nav_reminders">Reminders</string>
+    <string name="nav_settings">Settings</string>
+
+    <!-- Calendar -->
+    <string name="calendar_mode_month">Month</string>
+    <string name="calendar_mode_week">Week</string>
+    <string name="calendar_mode_day">Day</string>
+    <string name="calendar_mode_timeline">Timeline</string>
+    <string name="calendar_today">Today</string>
+    <string name="cd_calendar_previous">Previous period</string>
+    <string name="cd_calendar_next">Next period</string>
+    <string name="cd_calendar_day">%1$s, %2$d reminders</string>
+    <string name="calendar_more_count">+%1$d</string>
+    <string name="calendar_day_empty_title">Nothing scheduled</string>
+    <string name="calendar_day_empty_message">Long-press a day in the month view to create a reminder for it.</string>
+    <string name="calendar_timeline_empty_title">Nothing coming up</string>
+    <string name="calendar_timeline_empty_message">Reminders scheduled within the next 30 days will appear here.</string>
+    <string name="calendar_filter_theme">Theme</string>
+    <string name="calendar_filter_any_theme">Any theme</string>
+    <string name="filter_active">Active</string>
+    <string name="timeline_today">Today</string>
+    <string name="timeline_tomorrow">Tomorrow</string>
+    <string name="timeline_this_week">This week</string>
+    <string name="timeline_later">Later</string>
+    <string name="action_edit">Edit</string>
+    <string name="action_pause">Pause</string>
+    <string name="action_resume">Resume</string>
+
+    <!-- Home -->
+    <string name="home_greeting_morning">Good morning</string>
+    <string name="home_greeting_afternoon">Good afternoon</string>
+    <string name="home_greeting_evening">Good evening</string>
+    <string name="home_upcoming_title">Upcoming reminders</string>
+    <string name="home_upcoming_empty">Nothing scheduled yet. Your active reminders will appear here.</string>
+    <string name="home_stats_title">Statistics</string>
+    <string name="home_stat_total">Total</string>
+    <string name="home_stat_active">Active</string>
+    <string name="home_stat_paused">Paused</string>
+    <string name="home_stat_due_today">Due today</string>
+    <string name="home_stat_queued">Queued</string>
+    <string name="home_next_reminder">Next reminder</string>
+    <string name="home_queue_title">Display queue</string>
+    <string name="home_today_schedule">Today\'s schedule</string>
+    <string name="home_today_empty">Nothing else scheduled today.</string>
+    <string name="home_week_more">%1$d scheduled this week</string>
+    <string name="home_calendar_preview">Calendar</string>
+    <string name="home_quick_actions_title">Quick actions</string>
+    <string name="home_action_new_reminder">New reminder</string>
+    <string name="home_action_backup">Backup &amp; restore</string>
+    <string name="home_action_settings">Settings</string>
+    <string name="home_recent_title">Recent activity</string>
+    <string name="home_recent_empty">Changes you make will show up here.</string>
+
+    <!-- Reminders -->
+    <string name="reminders_new">New reminder</string>
+    <string name="reminders_search_hint">Search reminders</string>
+    <string name="reminders_empty_title">No reminders yet</string>
+    <string name="reminders_empty_message">Create your first reminder with the button below. Scheduling arrives in the next update.</string>
+    <string name="reminders_no_results_title">No matches</string>
+    <string name="reminders_no_results_message">No reminders match your search.</string>
+    <string name="reminder_field_title">Title</string>
+    <string name="reminder_field_notes">Notes</string>
+    <string name="reminder_status_running">Running</string>
+    <string name="reminder_status_queued">Queued</string>
+    <string name="reminder_status_upcoming">Upcoming</string>
+    <string name="reminder_status_waiting">Waiting</string>
+    <string name="reminder_status_completed">Completed</string>
+    <string name="reminder_status_expired">Expired</string>
+    <string name="reminder_status_disabled">Disabled</string>
+    <string name="countdown_due_now">Due now</string>
+    <string name="reminder_copy_title">%1$s (copy)</string>
+    <string name="priority_high">High</string>
+    <string name="priority_critical">Critical</string>
+    <string name="reminders_deleted_snackbar">Reminder deleted</string>
+    <string name="reminders_load_error">Something went wrong while loading your reminders.</string>
+    <string name="reminders_error_title">Unable to load</string>
+
+    <!-- Sorting -->
+    <string name="sort_next_trigger">Time remaining</string>
+    <string name="sort_newest">Newest first</string>
+    <string name="sort_oldest">Oldest first</string>
+    <string name="sort_alphabetical">Alphabetical</string>
+    <string name="sort_priority">Priority</string>
+    <string name="sort_recently_modified">Recently modified</string>
+
+    <!-- Filtering -->
+    <string name="filter_running">Running</string>
+    <string name="filter_queued">Queued</string>
+    <string name="filter_upcoming">Upcoming</string>
+    <string name="filter_waiting">Waiting</string>
+    <string name="filter_completed">Completed</string>
+    <string name="filter_expired">Expired</string>
+    <string name="filter_disabled">Disabled</string>
+    <string name="filter_one_time">One-time</string>
+    <string name="filter_recurring">Recurring</string>
+    <string name="filter_high_priority">High priority</string>
+    <string name="filter_critical">Critical</string>
+
+    <!-- Reminder editor -->
+    <string name="editor_title_new">New Reminder</string>
+    <string name="editor_title_edit">Edit Reminder</string>
+    <string name="editor_search_hint">Search settings</string>
+    <string name="editor_search_no_matches">No settings match your search.</string>
+    <string name="editor_pane_placeholder_title">No reminder selected</string>
+    <string name="editor_pane_placeholder_message">Choose a reminder from the list or create a new one.</string>
+    <string name="cd_close_editor">Close editor</string>
+    <string name="cd_editor_more_actions">More editor actions</string>
+    <string name="editor_discard_title">Discard changes?</string>
+    <string name="editor_discard_message">Your unsaved changes will be lost.</string>
+    <string name="editor_discard_confirm">Discard</string>
+    <string name="editor_delete_title">Delete reminder?</string>
+    <string name="editor_delete_message">This reminder and its scheduled alerts will be removed.</string>
+    <string name="editor_delete_button">Delete reminder</string>
+
+    <string name="editor_section_status">Status</string>
+    <string name="editor_status_next">Next trigger</string>
+    <string name="editor_status_last">Last triggered</string>
+    <string name="editor_status_schedule">Schedule</string>
+    <string name="editor_status_never">Never</string>
+    <string name="editor_status_none">Not scheduled</string>
+    <string name="common_on">On</string>
+    <string name="common_off">Off</string>
+    <string name="schedule_every">Every %1$s</string>
+    <string name="schedule_daily">Daily at %1$s</string>
+    <string name="schedule_weekly">Weekly at %1$s</string>
+    <string name="schedule_monthly">Monthly · day %1$d · %2$s</string>
+
+    <string name="editor_section_general">General</string>
+    <string name="editor_type">Reminder type</string>
+    <string name="type_text">Text</string>
+    <string name="type_drawing">Drawing</string>
+    <string name="type_checklist">Checklist</string>
+    <string name="editor_add_drawing">Add drawing</string>
+    <string name="editor_edit_drawing">Edit drawing</string>
+    <string name="editor_checklist_item">Item %1$d</string>
+    <string name="editor_preview_more_items">+%1$d more</string>
+    <string name="editor_add_checklist_item">Add item</string>
+    <string name="cd_remove_checklist_item">Remove item</string>
+    <string name="editor_drawing_size">Drawing size</string>
+    <string name="editor_drawing_position">Drawing position</string>
+    <string name="layout_top">Top</string>
+    <string name="layout_center">Centered</string>
+    <string name="layout_bottom">Bottom</string>
+    <string name="editor_priority">Priority</string>
+    <string name="priority_normal">Normal</string>
+    <string name="editor_enabled">Enabled</string>
+    <string name="editor_enabled_subtitle">Paused reminders keep their settings but never fire</string>
+
+    <string name="editor_section_display">Display</string>
+    <string name="editor_theme">Theme</string>
+    <string name="theme_primary_orange">Primary Orange</string>
+    <string name="theme_forest_green">Forest Green</string>
+    <string name="theme_golden_yellow">Golden Yellow</string>
+    <string name="theme_midnight_purple">Midnight Purple</string>
+    <string name="theme_berry_red">Berry Red</string>
+    <string name="theme_soft_cream">Soft Cream</string>
+    <string name="theme_orange_gradient">Orange Gradient</string>
+    <string name="theme_purple_gradient">Purple Gradient</string>
+    <string name="editor_display_mode">Display mode</string>
+    <string name="display_full_screen">Full screen</string>
+    <string name="display_floating_card">Floating card</string>
+    <string name="editor_floating_position">Position</string>
+    <string name="position_top_left">Top left</string>
+    <string name="position_top_center">Top center</string>
+    <string name="position_top_right">Top right</string>
+    <string name="position_center">Center</string>
+    <string name="position_bottom_left">Bottom left</string>
+    <string name="position_bottom_center">Bottom center</string>
+    <string name="position_bottom_right">Bottom right</string>
+    <string name="editor_floating_size">Card size</string>
+    <string name="size_small">Small</string>
+    <string name="size_medium">Medium</string>
+    <string name="size_large">Large</string>
+    <string name="editor_preview_placeholder_title">Reminder title</string>
+    <string name="editor_preview_auto_dismiss">Auto-dismisses after %1$s</string>
+
+    <string name="editor_section_dismissal">Dismissal</string>
+    <string name="editor_auto_dismiss">Auto dismiss</string>
+    <string name="editor_auto_dismiss_manual">Until manually dismissed</string>
+    <string name="editor_dismiss_lock">Dismiss countdown</string>
+    <string name="editor_dismiss_lock_subtitle">Keep the dismiss action locked for a moment after the alert appears</string>
+    <string name="editor_dismiss_lock_off">Off</string>
+    <string name="editor_acknowledgement">Acknowledgement</string>
+    <string name="editor_acknowledgement_subtitle">Gesture required before the alert can be closed</string>
+    <string name="ack_none">Not required</string>
+    <string name="ack_tap">Tap</string>
+    <string name="ack_swipe">Swipe</string>
+    <string name="ack_tick">Tick gesture</string>
+    <string name="ack_signature">Signature</string>
+    <string name="editor_swipe_direction">Swipe direction</string>
+    <string name="direction_up">Up</string>
+    <string name="direction_down">Down</string>
+    <string name="direction_left">Left</string>
+    <string name="direction_right">Right</string>
+
+    <string name="editor_section_snooze">Snooze</string>
+    <string name="editor_snooze_enabled">Allow snoozing</string>
+    <string name="editor_snooze_subtitle">Show snooze buttons on the alert</string>
+    <string name="editor_snooze_options">Snooze buttons</string>
+
+    <string name="editor_section_security">Security</string>
+    <string name="editor_require_fingerprint">Require fingerprint</string>
+    <string name="editor_require_fingerprint_subtitle">Authenticate before this alert can be dismissed</string>
+    <string name="editor_pin_fallback">Device PIN fallback</string>
+    <string name="editor_pin_fallback_subtitle">Allow the device PIN when biometrics fail</string>
+    <string name="editor_security_note">Devices without the selected method automatically use whichever screen-lock authentication is available.</string>
+
+    <string name="editor_section_alerts">Alert behavior</string>
+    <string name="editor_wake_screen">Wake screen</string>
+    <string name="editor_show_lock_screen">Show on lock screen</string>
+    <string name="editor_vibration">Vibration</string>
+    <string name="editor_sound">Notification sound</string>
+    <string name="editor_history">Keep in history</string>
+    <string name="editor_history_subtitle">Record each time this reminder fires</string>
+    <string name="editor_overlay">Display over other apps</string>
+    <string name="overlay_auto">Automatic</string>
+    <string name="overlay_prefer">Prefer overlay</string>
+    <string name="overlay_never">Never overlay</string>
+
+    <string name="editor_section_schedule">Schedule</string>
+    <string name="schedule_mode_at">At</string>
+    <string name="schedule_mode_in">In</string>
+    <string name="schedule_mode_recurring">Recurring</string>
+    <string name="schedule_in_custom">Custom…</string>
+    <string name="editor_recurrence">Repeat</string>
+    <string name="recurrence_one_time">One time</string>
+    <string name="recurrence_every_minutes">Every X minutes</string>
+    <string name="recurrence_every_hours">Every X hours</string>
+    <string name="recurrence_daily">Daily</string>
+    <string name="recurrence_weekly">Weekly</string>
+    <string name="recurrence_monthly">Monthly</string>
+    <string name="recurrence_custom">Custom interval</string>
+    <string name="recurrence_none">No schedule</string>
+    <string name="editor_recurrence_none_note">This reminder is not scheduled and will never fire.</string>
+    <string name="editor_one_time_date">Date</string>
+    <string name="editor_one_time_time">Time</string>
+    <string name="editor_interval_minutes">Repeat every (minutes)</string>
+    <string name="editor_interval_hours">Repeat every (hours)</string>
+    <string name="editor_monthly_day">Day of month</string>
+    <string name="editor_custom_interval_value">Repeat every</string>
+    <string name="unit_minutes">Minutes</string>
+    <string name="unit_hours">Hours</string>
+    <string name="unit_days">Days</string>
+    <string name="editor_time_of_day">Time</string>
+    <string name="editor_weekly_note">Fires at this time on the active days selected below.</string>
+    <string name="editor_active_days">Active days</string>
+    <string name="editor_active_hours">Limit to active hours</string>
+    <string name="editor_active_hours_subtitle">Only fire between the selected times</string>
+    <string name="editor_active_hours_start">Start time</string>
+    <string name="editor_active_hours_end">End time</string>
+    <string name="editor_start_date">Start date</string>
+    <string name="editor_end_date">End date</string>
+    <string name="editor_date_not_set">Not set</string>
+    <string name="cd_clear_start_date">Clear start date</string>
+    <string name="cd_clear_end_date">Clear end date</string>
+
+    <!-- Editor validation -->
+    <string name="editor_error_title_required">Give your reminder a title.</string>
+    <string name="editor_error_checklist_items">Add at least one checklist item.</string>
+    <string name="editor_error_one_time_past">Pick a time in the future.</string>
+    <string name="editor_error_interval_invalid">Enter an interval of at least 1 (up to one week).</string>
+    <string name="editor_error_snooze_durations">Select at least one snooze duration.</string>
+    <string name="editor_error_active_days">Select at least one active day.</string>
+    <string name="editor_error_date_range">The end date must be after the start date.</string>
+    <string name="editor_error_time_outside_hours">The reminder time is outside the active hours, so it would never fire.</string>
+
+    <!-- Alerts (presentation engine) -->
+    <string name="alert_dismiss">Dismiss</string>
+    <string name="alert_acknowledge">Acknowledge</string>
+    <string name="alert_dismiss_locked">Dismiss · %1$ds</string>
+    <string name="alert_swipe_hint_up">Swipe up to dismiss</string>
+    <string name="alert_swipe_hint_down">Swipe down to dismiss</string>
+    <string name="alert_swipe_hint_left">Swipe left to dismiss</string>
+    <string name="alert_swipe_hint_right">Swipe right to dismiss</string>
+    <string name="alert_tick_hint">Paint the checkmark to acknowledge</string>
+    <string name="alert_signature_hint">Sign to acknowledge</string>
+    <string name="alert_auto_dismiss_in">Dismisses in %1$ds</string>
+    <string name="alert_checklist_progress">%1$d of %2$d done</string>
+    <string name="alert_checklist_complete">Complete</string>
+    <plurals name="alert_checklist_locked">
+        <item quantity="one">Check %1$d more item</item>
+        <item quantity="other">Check %1$d more items</item>
+    </plurals>
+    <string name="cd_tick_canvas">Checkmark acknowledgement canvas</string>
+    <string name="cd_signature_pad">Signature pad</string>
+    <string name="cd_snooze_for">Snooze for %1$s</string>
+    <string name="cd_archived_signature">Archived acknowledgement signature</string>
+    <string name="cd_brush_size">Brush size</string>
+    <string name="home_active_now">Happening now</string>
+    <string name="biometric_prompt_title">Confirm to dismiss reminder</string>
+
+    <!-- Onboarding -->
+    <string name="onboarding_welcome_title">Welcome to Alert Notes</string>
+    <string name="onboarding_welcome_message">Reminders that make sure you notice them — full-screen alerts, drawings, checklists, and signatures. Everything stays on this device.</string>
+    <string name="onboarding_feature_alarms">Exact-time reminders, even while the device sleeps</string>
+    <string name="onboarding_feature_alerts">Alerts over other apps and the lock screen</string>
+    <string name="onboarding_feature_privacy">Completely offline — no accounts, no tracking</string>
+    <string name="onboarding_continue">Set up alerts</string>
+    <string name="onboarding_skip">Skip for now</string>
+    <string name="onboarding_back">Back</string>
+    <string name="onboarding_done">Start using Alert Notes</string>
+    <string name="onboarding_grant">Grant</string>
+    <string name="onboarding_permissions_title">Make alerts reliable</string>
+    <string name="onboarding_permissions_message">Each of these helps reminders reach you. All are optional and can be changed later in Settings.</string>
+
+    <!-- App lock -->
+    <string name="app_lock_prompt_title">Unlock Alert Notes</string>
+    <string name="app_lock_title">Alert Notes is locked</string>
+    <string name="app_lock_message">Unlock with your fingerprint, face, or device PIN.</string>
+    <string name="app_lock_unlock">Unlock</string>
+    <string name="notification_channel_alerts">Reminder alerts</string>
+    <string name="notification_channel_silent">Silent reminder alerts</string>
+    <string name="notification_channel_alerts_description">Due reminders while Alert Notes is in the background</string>
+
+    <!-- Activity history -->
+    <string name="history_title">Activity</string>
+    <string name="history_search_hint">Search activity</string>
+    <string name="history_empty_title">No activity yet</string>
+    <string name="history_empty_message">Reminders with history enabled record each time they fire.</string>
+    <string name="history_export">Export activity as CSV</string>
+    <string name="history_export_success">Activity exported.</string>
+    <string name="history_export_failure">Export failed. Nothing was changed.</string>
+    <string name="history_triggered_at">Triggered %1$s</string>
+    <string name="history_dismissed_via">Dismissed %1$s · %2$s</string>
+    <string name="history_snoozed_for">Snoozed for %1$d minutes</string>
+    <string name="history_still_open">Not yet dismissed</string>
+    <string name="method_button">Button</string>
+    <string name="method_auto">Auto-dismissed</string>
+    <string name="method_notification">Notification</string>
+    <string name="method_snooze">Snoozed</string>
+    <string name="method_checklist">Checklist completed</string>
+
+    <!-- Widgets -->
+    <string name="widget_description">Next reminder, live countdown, and today\'s schedule</string>
+    <string name="widget_no_upcoming">No upcoming reminders</string>
+    <string name="widget_next_in">in %1$s</string>
+    <string name="widget_new_reminder">New reminder</string>
+    <string name="widget_open_app">Open</string>
+    <string name="widget_today_count">%1$d today</string>
+
+    <!-- Drawing canvas -->
+    <string name="drawing_canvas_title">Drawing</string>
+    <string name="drawing_tool_pen">Pen</string>
+    <string name="drawing_tool_highlighter">Highlighter</string>
+    <string name="drawing_tool_eraser">Eraser</string>
+    <string name="drawing_undo">Undo</string>
+    <string name="drawing_redo">Redo</string>
+    <string name="drawing_clear">Clear canvas</string>
+    <string name="drawing_brush_size">Brush size</string>
+    <string name="drawing_more_tools">More tools</string>
+    <string name="cd_drawing_canvas">Drawing canvas</string>
+    <string name="cd_ink_color">Ink color</string>
+    <string name="cd_canvas_background">Canvas background color</string>
+
+    <!-- Durations -->
+    <string name="duration_short_seconds">%1$ds</string>
+    <string name="duration_short_minutes">%1$dm</string>
+    <plurals name="duration_seconds">
+        <item quantity="one">%1$d second</item>
+        <item quantity="other">%1$d seconds</item>
+    </plurals>
+    <plurals name="duration_minutes">
+        <item quantity="one">%1$d minute</item>
+        <item quantity="other">%1$d minutes</item>
+    </plurals>
+    <plurals name="duration_hours">
+        <item quantity="one">%1$d hour</item>
+        <item quantity="other">%1$d hours</item>
+    </plurals>
+
+    <!-- Settings -->
+    <string name="settings_section_appearance">Appearance</string>
+    <string name="settings_theme">Theme</string>
+    <string name="settings_theme_dialog_title">Theme</string>
+    <string name="theme_system">Follow system</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
+    <string name="settings_dynamic_colors">Material You colors</string>
+    <string name="settings_dynamic_colors_subtitle">Use wallpaper-based colors instead of the Alert Notes palette (Android 12+)</string>
+    <string name="settings_section_notifications">Notifications</string>
+    <string name="settings_notifications_toggle">Reminder alerts</string>
+    <string name="settings_notifications_subtitle">Allow reminders to notify you when they are due</string>
+    <string name="settings_critical_interrupts">Critical reminders interrupt</string>
+    <string name="settings_critical_interrupts_subtitle">Let a critical reminder replace a lower-priority alert already on screen</string>
+    <string name="settings_section_permissions">Permissions</string>
+    <string name="permission_notifications">Notifications</string>
+    <string name="permission_full_screen">Full-screen alerts</string>
+    <string name="permission_exact_alarms">Exact alarms</string>
+    <string name="permission_overlay">Display over other apps</string>
+    <string name="permission_battery">Ignore battery optimization</string>
+    <string name="permission_biometric">Biometric authentication</string>
+    <string name="permission_notifications_description">Shows alerts for due reminders while the app is in the background.</string>
+    <string name="permission_full_screen_description">Lets a due reminder take over the screen, including from the lock screen.</string>
+    <string name="permission_exact_alarms_description">Fires reminders at the exact minute, even while the device sleeps.</string>
+    <string name="permission_overlay_description">Shows alerts on top of other apps without opening Alert Notes.</string>
+    <string name="permission_battery_description">Stops the system delaying reminders to save battery. Recommended.</string>
+    <string name="permission_biometric_description">Enables fingerprint or face confirmation for protected reminders and the app lock.</string>
+    <string name="permission_status_granted">Granted</string>
+    <string name="permission_status_not_granted">Not granted</string>
+    <string name="permission_status_not_required">Not required</string>
+    <string name="permission_status_unavailable">Unavailable</string>
+    <string name="permission_status_recommended">Recommended</string>
+    <string name="permission_status_missing">Missing</string>
+    <string name="battery_dialog_title">Allow reliable reminders</string>
+    <string name="battery_dialog_message">Some devices delay alarms to save battery. Excluding Alert Notes from battery optimization keeps reminders exactly on time. This is recommended but entirely optional — you can change it any time.</string>
+    <string name="battery_dialog_open_settings">Open settings</string>
+    <string name="settings_section_security">Security</string>
+    <string name="settings_biometric_lock">Biometric lock</string>
+    <string name="settings_biometric_lock_subtitle">Require fingerprint or face unlock to open the app</string>
+    <string name="settings_biometric_unavailable">This device has no usable biometric hardware</string>
+    <string name="settings_section_privacy">Privacy</string>
+    <string name="settings_privacy_statement">Alert Notes works entirely offline. Your reminders never leave this device — there are no accounts, no analytics, no advertisements, and no cloud services.</string>
+    <string name="settings_section_data">Import &amp; export</string>
+    <string name="settings_backup_row">Backup &amp; restore</string>
+    <string name="settings_backup_row_subtitle">Export or import your data as ZIP or CSV</string>
+    <string name="settings_section_controls">Reminder controls</string>
+    <string name="settings_pause_all">Pause all reminders</string>
+    <string name="settings_pause_off">Reminders are active</string>
+    <string name="settings_pause_indefinite">Paused until you resume</string>
+    <string name="settings_pause_until">Paused until %1$s</string>
+    <string name="settings_pause_resume">Resume reminders</string>
+    <string name="settings_pause_pick">Until a date &amp; time…</string>
+    <string name="settings_pause_pick_time">Resume time</string>
+    <string name="settings_clear_all">Clear all reminders</string>
+    <string name="settings_clear_all_subtitle">Deletes every reminder, schedule, drawing, and history entry</string>
+    <string name="clear_all_title">Clear all reminders?</string>
+    <string name="clear_all_message">Every reminder, its schedule, drawings, and history will be permanently deleted. This cannot be undone.</string>
+    <string name="clear_all_biometric_title">Confirm to clear all reminders</string>
+    <string name="home_paused_title">Reminders paused</string>
+    <string name="home_paused_countdown">Paused</string>
+    <string name="settings_section_history">Activity</string>
+    <string name="settings_history_row">Activity history</string>
+    <string name="settings_history_row_subtitle">When reminders fired, how they were resolved, signatures, export</string>
+    <string name="settings_section_about">About</string>
+    <string name="settings_about_row">About Alert Notes</string>
+    <string name="settings_section_developer">Developer</string>
+    <string name="settings_version">Version</string>
+    <string name="settings_build_type">Build type</string>
+    <string name="settings_exit_app">Exit application</string>
+    <string name="settings_exit_app_subtitle">Closes the app screen only. Scheduled reminders keep firing.</string>
+
+    <!-- About -->
+    <string name="about_title">About</string>
+    <string name="about_version_format">Version %1$s (%2$d)</string>
+    <string name="about_developer_title">Developer</string>
+    <string name="about_developer_name">Alert Notes Team</string>
+    <string name="about_developer_subtitle">Made with care for people who forget things</string>
+    <string name="about_privacy_title">Privacy</string>
+    <string name="about_privacy_text">Everything you store in Alert Notes stays on your device. The app requires no account, collects no analytics, shows no advertisements, and never connects to the internet. Privacy is not a setting here — it is how the app is built.</string>
+    <string name="about_license_title">License</string>
+    <string name="about_license_text">© 2026 Alert Notes. All rights reserved. Third-party libraries are used under their respective licenses listed below.</string>
+    <string name="about_libraries_title">Open source libraries</string>
+    <string name="license_apache_2">Apache License 2.0</string>
+    <string name="library_compose" translatable="false">Jetpack Compose</string>
+    <string name="library_material3" translatable="false">Material 3</string>
+    <string name="library_navigation" translatable="false">Navigation Compose</string>
+    <string name="library_room" translatable="false">Room</string>
+    <string name="library_hilt" translatable="false">Hilt</string>
+    <string name="library_datastore" translatable="false">DataStore</string>
+    <string name="library_coroutines" translatable="false">Kotlin Coroutines</string>
+    <string name="library_serialization" translatable="false">Kotlinx Serialization</string>
+    <string name="library_biometric" translatable="false">AndroidX Biometric</string>
+
+    <!-- Backup -->
+    <string name="backup_title">Backup &amp; restore</string>
+    <string name="backup_privacy_note">Backups are created locally and never uploaded anywhere.</string>
+    <string name="backup_export_title">Export</string>
+    <string name="backup_export_subtitle">Save all reminders and settings to a file you control.</string>
+    <string name="backup_export_zip">Export as ZIP</string>
+    <string name="backup_export_csv">Export as CSV</string>
+    <string name="backup_import_title">Import</string>
+    <string name="backup_import_subtitle">Restore reminders from a previously exported file. Imports add reminders — they never overwrite existing ones.</string>
+    <string name="backup_import_zip">Import ZIP backup</string>
+    <string name="backup_import_csv">Import CSV</string>
+    <string name="backup_export_done">Exported %1$d reminders.</string>
+    <string name="backup_import_done">Imported %1$d reminders.</string>
+    <string name="backup_failed">Something went wrong. Nothing was changed.</string>
+</resources>

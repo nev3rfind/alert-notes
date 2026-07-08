@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Compose owns all UI colors (see core/ui/theme/Color.kt). Only values
+         referenced from XML resources belong here. -->
+    <color name="launcher_background_start">#F1734B</color>
+    <color name="launcher_background_end">#D24218</color>
+    <!-- Matches the Compose background so the window never flashes at launch. -->
+    <color name="window_background">#F6F3F1</color>
+</resources>
