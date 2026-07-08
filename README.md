@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Alert Notes
 
 An **offline-first reminder app for Android** designed to interrupt your attention with scheduled visual reminders — without ever touching the network.
@@ -82,3 +83,7 @@ Completed so far:
 - **Phase 10 — production (1.0.0)**: the critical trap-bug fix (full-screen alerts now reserve an uncoverable action area — 100% drawings can never hide the controls), a fail-safe presentation pipeline (unloadable entries consumed, crash-looping entries quarantined), checklist reminders (third type, with animated check-off and completion-gated acknowledgement), signature-archived acknowledgements in a new Activity screen with search/filters/CSV export, six drawing paper styles + a twelve-color ink palette + stylus pressure, first-run onboarding with a guided permission flow, a working biometric/PIN app lock, per-permission explanations in the Permission Center, an Exit Application entry that never touches scheduling, and the full documentation set (User Guide, Permissions, Known Limitations).
 
 The roadmap beyond 1.0.0: more locales, optional extras (custom sounds, tiles, Wear).
+=======
+# alert-notes-offline
+Sharelert
+>>>>>>> 58af619f7bcabc308b23a9b8353afef9e24ef305
