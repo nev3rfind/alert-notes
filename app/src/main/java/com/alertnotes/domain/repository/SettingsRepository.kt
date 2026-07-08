@@ -1,5 +1,6 @@
 package com.alertnotes.domain.repository
 
+import com.alertnotes.domain.model.AppMode
 import com.alertnotes.domain.model.ThemeMode
 import com.alertnotes.domain.model.UserPreferences
 import kotlinx.coroutines.flow.Flow
@@ -23,6 +24,8 @@ interface SettingsRepository {
     suspend fun setBiometricLockEnabled(enabled: Boolean)
 
     suspend fun setOnboardingCompleted(completed: Boolean)
+
+    suspend fun setAppMode(mode: AppMode)
 
     /** Null resumes; [UserPreferences.PAUSE_INDEFINITE] pauses until resumed. */
     suspend fun setPausedUntil(until: java.time.Instant?)

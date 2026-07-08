@@ -6,10 +6,14 @@ import com.alertnotes.core.util.AndroidAppLogger
 import com.alertnotes.core.util.AppLogger
 import com.alertnotes.core.util.SystemTimeProvider
 import com.alertnotes.core.util.TimeProvider
+import com.alertnotes.data.repository.AuthRepositoryImpl
+import com.alertnotes.data.repository.CloudBackupRepositoryImpl
 import com.alertnotes.data.repository.ReminderHistoryRepositoryImpl
 import com.alertnotes.data.repository.ReminderQueueRepositoryImpl
 import com.alertnotes.data.repository.ReminderRepositoryImpl
 import com.alertnotes.data.repository.SettingsRepositoryImpl
+import com.alertnotes.domain.repository.AuthRepository
+import com.alertnotes.domain.repository.CloudBackupRepository
 import com.alertnotes.domain.repository.ReminderHistoryRepository
 import com.alertnotes.domain.repository.ReminderQueueRepository
 import com.alertnotes.domain.repository.ReminderRepository
@@ -43,6 +47,12 @@ abstract class BindingsModule {
 
     @Binds
     abstract fun bindSettingsRepository(impl: SettingsRepositoryImpl): SettingsRepository
+
+    @Binds
+    abstract fun bindAuthRepository(impl: AuthRepositoryImpl): AuthRepository
+
+    @Binds
+    abstract fun bindCloudBackupRepository(impl: CloudBackupRepositoryImpl): CloudBackupRepository
 
     @Binds
     abstract fun bindReminderScheduler(impl: AlarmManagerReminderScheduler): ReminderScheduler

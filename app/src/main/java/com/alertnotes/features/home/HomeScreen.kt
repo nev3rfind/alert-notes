@@ -57,6 +57,7 @@ import com.alertnotes.core.ui.components.SectionCard
 import com.alertnotes.core.ui.theme.spacing
 import com.alertnotes.domain.model.Reminder
 import com.alertnotes.domain.model.UserPreferences
+import com.alertnotes.features.account.ModeStatusBadge
 import com.alertnotes.features.alerts.AlertIconBadge
 import com.alertnotes.features.alerts.alertAccentColor
 import com.alertnotes.features.alerts.staticBrush
@@ -195,6 +196,7 @@ private fun DashboardHeader() {
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            ModeStatusBadge(modifier = Modifier.padding(top = MaterialTheme.spacing.small))
         }
         // Live clock: a leaf composable — only this text ticks each second.
         LiveClockText(

@@ -88,6 +88,7 @@ fun SettingsScreen(
 ) {
     val preferences by viewModel.preferences.collectAsStateWithLifecycle()
     val permissionStates by viewModel.permissionStates.collectAsStateWithLifecycle()
+    val authUser by viewModel.authUser.collectAsStateWithLifecycle()
     var showThemeDialog by rememberSaveable { mutableStateOf(false) }
     var batteryExplanationFor by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
@@ -141,6 +142,13 @@ fun SettingsScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.extraLarge),
             ) {
+                item {
+                    ApplicationModeSection(
+                        mode = preferences.appMode,
+                        authUser = authUser,
+                        viewModel = viewModel,
+                    )
+                }
                 item {
                     SectionCard(title = stringResource(R.string.settings_section_appearance)) {
                         AppListItem(

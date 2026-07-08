@@ -316,7 +316,7 @@
     <string name="onboarding_welcome_message">Reminders that make sure you notice them — full-screen alerts, drawings, checklists, and signatures. Everything stays on this device.</string>
     <string name="onboarding_feature_alarms">Exact-time reminders, even while the device sleeps</string>
     <string name="onboarding_feature_alerts">Alerts over other apps and the lock screen</string>
-    <string name="onboarding_feature_privacy">Completely offline — no accounts, no tracking</string>
+    <string name="onboarding_feature_privacy">Offline-first — reminders never require the cloud</string>
     <string name="onboarding_continue">Set up alerts</string>
     <string name="onboarding_skip">Skip for now</string>
     <string name="onboarding_back">Back</string>
@@ -431,7 +431,7 @@
     <string name="settings_biometric_lock_subtitle">Require fingerprint or face unlock to open the app</string>
     <string name="settings_biometric_unavailable">This device has no usable biometric hardware</string>
     <string name="settings_section_privacy">Privacy</string>
-    <string name="settings_privacy_statement">Alert Notes works entirely offline. Your reminders never leave this device — there are no accounts, no analytics, no advertisements, and no cloud services.</string>
+    <string name="settings_privacy_statement">Alert Notes is offline-first. Reminders always live on this device and never require the cloud. Online mode is optional and only adds account features — backup, sharing, and sync — that you choose to use. No analytics, no advertisements.</string>
     <string name="settings_section_data">Import &amp; export</string>
     <string name="settings_backup_row">Backup &amp; restore</string>
     <string name="settings_backup_row_subtitle">Export or import your data as ZIP or CSV</string>
@@ -468,7 +468,7 @@
     <string name="about_developer_name">Alert Notes Team</string>
     <string name="about_developer_subtitle">Made with care for people who forget things</string>
     <string name="about_privacy_title">Privacy</string>
-    <string name="about_privacy_text">Everything you store in Alert Notes stays on your device. The app requires no account, collects no analytics, shows no advertisements, and never connects to the internet. Privacy is not a setting here — it is how the app is built.</string>
+    <string name="about_privacy_text">Everything you store in Alert Notes lives on your device first. The app works fully without an account; online mode is an optional, opt-in layer for cloud backup, sharing, and sync. No analytics, no advertisements. Privacy is not a setting here — it is how the app is built.</string>
     <string name="about_license_title">License</string>
     <string name="about_license_text">© 2026 Alert Notes. All rights reserved. Third-party libraries are used under their respective licenses listed below.</string>
     <string name="about_libraries_title">Open source libraries</string>
@@ -497,4 +497,100 @@
     <string name="backup_export_done">Exported %1$d reminders.</string>
     <string name="backup_import_done">Imported %1$d reminders.</string>
     <string name="backup_failed">Something went wrong. Nothing was changed.</string>
+
+    <!-- Mode selection (first launch) -->
+    <string name="mode_select_title">Choose Your Experience</string>
+    <string name="mode_select_message">You can use Alert Notes completely offline, or create an account to unlock cloud features.</string>
+    <string name="mode_select_offline_title">Offline Mode</string>
+    <string name="mode_select_offline_line_local">Everything stays on this device.</string>
+    <string name="mode_select_offline_line_no_account">No account required.</string>
+    <string name="mode_select_offline_line_privacy">Maximum privacy.</string>
+    <string name="mode_select_offline_line_works_offline">Works completely offline.</string>
+    <string name="mode_select_offline_button">Continue Offline</string>
+    <string name="mode_select_online_title">Online Mode</string>
+    <string name="mode_select_online_line_backup">Secure cloud backup.</string>
+    <string name="mode_select_online_line_sharing">Reminder sharing.</string>
+    <string name="mode_select_online_line_family">Family &amp; Friends.</string>
+    <string name="mode_select_online_line_chat">Chat.</string>
+    <string name="mode_select_online_line_sync">Multi-device sync.</string>
+    <string name="mode_select_online_button">Continue Online</string>
+    <string name="mode_select_footer">You can switch modes at any time in Settings.</string>
+
+    <!-- Authentication -->
+    <string name="auth_welcome_title">Your Alert Notes account</string>
+    <string name="auth_welcome_message">Sign in or create an account to unlock cloud backup, sharing, and sync. Your reminders always stay on this device too.</string>
+    <string name="auth_welcome_sign_in">Sign in</string>
+    <string name="auth_welcome_create_account">Create account</string>
+    <string name="auth_welcome_back">Back</string>
+    <string name="auth_login_title">Sign in</string>
+    <string name="auth_login_message">Use the email and password of your Alert Notes account.</string>
+    <string name="auth_login_submit">Sign in</string>
+    <string name="auth_login_forgot">Forgot password?</string>
+    <string name="auth_login_no_account">No account yet?</string>
+    <string name="auth_register_title">Create your account</string>
+    <string name="auth_register_message">One account for backup, sharing, and sync across your devices.</string>
+    <string name="auth_register_submit">Create account</string>
+    <string name="auth_register_have_account">Already have an account?</string>
+    <string name="auth_forgot_title">Reset password</string>
+    <string name="auth_forgot_message">Enter your account email and we\'ll send you a link to choose a new password.</string>
+    <string name="auth_forgot_submit">Send reset link</string>
+    <string name="auth_forgot_sent_title">Check your inbox</string>
+    <string name="auth_forgot_sent_message">If an account exists for that email, a password reset link is on its way.</string>
+    <string name="auth_forgot_back_to_login">Back to sign in</string>
+    <string name="auth_field_display_name">Display name</string>
+    <string name="auth_field_username">Username</string>
+    <string name="auth_field_email">Email</string>
+    <string name="auth_field_password">Password</string>
+    <string name="auth_field_confirm_password">Confirm password</string>
+    <string name="cd_show_password">Show password</string>
+    <string name="cd_hide_password">Hide password</string>
+
+    <!-- Authentication validation and errors -->
+    <string name="auth_field_required">Required</string>
+    <string name="auth_field_username_invalid">3–20 characters: letters, numbers, and underscores.</string>
+    <string name="auth_field_password_too_short">Use at least 8 characters.</string>
+    <string name="auth_field_passwords_mismatch">Passwords don\'t match.</string>
+    <string name="auth_error_invalid_email">That email address doesn\'t look right.</string>
+    <string name="auth_error_invalid_credentials">Email or password is incorrect.</string>
+    <string name="auth_error_user_not_found">No account exists for that email.</string>
+    <string name="auth_error_email_in_use">An account with this email already exists.</string>
+    <string name="auth_error_username_taken">That username is already taken.</string>
+    <string name="auth_error_weak_password">That password is too weak — try a longer one.</string>
+    <string name="auth_error_too_many_requests">Too many attempts. Please wait a moment and try again.</string>
+    <string name="auth_error_account_disabled">This account has been disabled.</string>
+    <string name="auth_error_network">No connection. Check your internet and try again.</string>
+    <string name="auth_error_unknown">Something went wrong. Please try again.</string>
+
+    <!-- Application mode (settings) -->
+    <string name="settings_section_mode">Application Mode</string>
+    <string name="settings_mode_offline">Offline mode</string>
+    <string name="settings_mode_offline_subtitle">Everything stored locally</string>
+    <string name="settings_mode_online">Online mode</string>
+    <string name="settings_mode_signed_in_as">Signed in as %1$s</string>
+    <string name="settings_mode_not_signed_in">Not signed in</string>
+    <string name="settings_mode_sign_in">Sign in</string>
+    <string name="settings_mode_sign_in_subtitle">Restore your online session</string>
+    <string name="settings_mode_switch_online">Switch to Online Mode</string>
+    <string name="settings_mode_switch_online_subtitle">Sign in to enable cloud backup, sharing, and sync</string>
+    <string name="settings_mode_switch_offline">Switch to Offline Mode</string>
+    <string name="settings_mode_switch_offline_subtitle">Sign out and stop cloud features. Everything stays on this device.</string>
+    <string name="settings_mode_offline_confirm_title">Switch to offline mode?</string>
+    <string name="settings_mode_offline_confirm_message">You will be signed out and cloud features stop. Every reminder stays on this device, and anything already uploaded remains safely in your account.</string>
+    <string name="settings_mode_offline_confirm_button">Switch</string>
+    <string name="settings_mode_upload_row">Upload reminders</string>
+    <string name="settings_mode_upload_row_subtitle">Copy this device\'s reminders to your cloud account</string>
+
+    <!-- Cloud upload -->
+    <string name="cloud_upload_title">Upload reminders?</string>
+    <string name="cloud_upload_message">Would you like to upload your local reminders to your cloud account?</string>
+    <string name="cloud_upload_confirm">Upload</string>
+    <string name="cloud_upload_skip">Skip</string>
+    <string name="cloud_upload_in_progress">Uploading your reminders…</string>
+    <string name="cloud_upload_done_title">Upload complete</string>
+    <plurals name="cloud_upload_done_message">
+        <item quantity="one">%1$d reminder is now backed up to your account.</item>
+        <item quantity="other">%1$d reminders are now backed up to your account.</item>
+    </plurals>
+    <string name="cloud_upload_failed_title">Upload failed</string>
+    <string name="cloud_upload_failed_message">Nothing was uploaded. Check your connection and try again from Settings.</string>
 </resources>

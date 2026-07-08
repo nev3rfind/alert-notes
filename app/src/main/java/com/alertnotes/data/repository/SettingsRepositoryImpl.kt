@@ -1,6 +1,7 @@
 package com.alertnotes.data.repository
 
 import com.alertnotes.data.datastore.UserPreferencesDataSource
+import com.alertnotes.domain.model.AppMode
 import com.alertnotes.domain.model.ThemeMode
 import com.alertnotes.domain.model.UserPreferences
 import com.alertnotes.domain.repository.SettingsRepository
@@ -37,6 +38,10 @@ class SettingsRepositoryImpl @Inject constructor(
 
     override suspend fun setOnboardingCompleted(completed: Boolean) {
         dataSource.setOnboardingCompleted(completed)
+    }
+
+    override suspend fun setAppMode(mode: AppMode) {
+        dataSource.setAppMode(mode)
     }
 
     override suspend fun setPausedUntil(until: java.time.Instant?) {

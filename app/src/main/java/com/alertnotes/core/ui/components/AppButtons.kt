@@ -10,8 +10,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -26,7 +28,11 @@ import com.alertnotes.core.ui.theme.AlertNotesTheme
 private val ButtonHeight = 48.dp
 private val ButtonIconSize = 20.dp
 
-/** High-emphasis action. Use at most one per screen region. */
+/**
+ * High-emphasis action. Use at most one per screen region. While [loading]
+ * the label is replaced by a spinner and clicks are ignored — for submits
+ * that must not fire twice.
+ */
 @Composable
 fun PrimaryButton(
     text: String,
@@ -34,6 +40,7 @@ fun PrimaryButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     icon: ImageVector? = null,
+    loading: Boolean = false,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     Button(
@@ -41,11 +48,19 @@ fun PrimaryButton(
         modifier = modifier
             .heightIn(min = ButtonHeight)
             .pressScale(interactionSource),
-        enabled = enabled,
+        enabled = enabled && !loading,
         shape = MaterialTheme.shapes.large,
         interactionSource = interactionSource,
     ) {
-        ButtonContent(text = text, icon = icon)
+        if (loading) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(ButtonIconSize),
+                color = LocalContentColor.current,
+                strokeWidth = 2.dp,
+            )
+        } else {
+            ButtonContent(text = text, icon = icon)
+        }
     }
 }
 
