@@ -51,4 +51,18 @@ object FirestoreSchema {
 
     /** Lowercase username reservations keeping usernames unique. */
     const val USERNAMES = "usernames"
+
+    /**
+     * Top-level friend requests, doc id `{fromUid}_{toUid}` — deterministic
+     * so a duplicate request is structurally impossible. Future Cloud
+     * Functions validate transitions server-side on this collection.
+     */
+    const val FRIEND_REQUESTS = "friendRequests"
+
+    /**
+     * Accepted friendships: `users/{uid}/friends/{friendUid}`, one thin doc
+     * per edge per user. Subcollection (not an array field) so thousands of
+     * friends stay queryable and each edge carries its own metadata.
+     */
+    const val FRIENDS = "friends"
 }

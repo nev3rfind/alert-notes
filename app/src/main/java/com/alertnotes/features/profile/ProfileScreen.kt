@@ -469,6 +469,8 @@ private fun ProfileDashboard.toStatItems(): List<StatItem> = buildList {
     add(StatItem(completed.toString(), R.string.profile_stat_completed))
     add(StatItem(shared.toString(), R.string.profile_stat_shared))
     add(StatItem(friends.toString(), R.string.profile_stat_friends))
+    add(StatItem(incomingRequests.toString(), R.string.profile_stat_incoming))
+    add(StatItem(outgoingRequests.toString(), R.string.profile_stat_outgoing))
     add(StatItem(family.toString(), R.string.profile_stat_family))
     add(StatItem(devices.toString(), R.string.profile_stat_devices))
     accountAgeDays?.let { add(StatItem(it.toString(), R.string.profile_stat_account_age)) }

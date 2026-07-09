@@ -186,20 +186,6 @@ class UserProfileRepositoryImpl @Inject constructor(
     private fun requireUser(): FirebaseUser =
         auth.currentUser ?: throw AuthException(AuthError.UNKNOWN)
 
-    private fun DocumentSnapshot?.toPublicProfile(): PublicProfile = PublicProfile(
-        displayName = this?.getString("displayName").orEmpty(),
-        username = this?.getString("username").orEmpty(),
-        photoUrl = this?.getString("photoUrl"),
-        statusMessage = this?.getString("statusMessage").orEmpty(),
-        online = this?.getBoolean("online") == true,
-        lastSeen = instantOf("lastSeen"),
-        // Unknown/missing values degrade to the brand default, like every
-        // persisted enum in the app.
-        bannerTheme = ProfileTheme.entries
-            .firstOrNull { it.name == this?.getString("bannerTheme") }
-            ?: ProfileTheme.PRIMARY_ORANGE,
-    )
-
     private fun DocumentSnapshot?.toProfileStatistics(): ProfileStatistics = ProfileStatistics(
         friendCount = intOf("friendCount"),
         familyCount = intOf("familyCount"),

@@ -85,6 +85,8 @@ data class ProfileDashboard(
     val friends: Int = 0,
     val family: Int = 0,
     val devices: Int = 0,
+    val incomingRequests: Int = 0,
+    val outgoingRequests: Int = 0,
     val accountAgeDays: Long? = null,
 )
 
@@ -93,6 +95,7 @@ class ProfileViewModel @Inject constructor(
     authRepository: AuthRepository,
     reminderRepository: ReminderRepository,
     historyRepository: ReminderHistoryRepository,
+    friendRepository: com.alertnotes.domain.repository.FriendRepository,
     private val timeProvider: TimeProvider,
     private val settingsRepository: SettingsRepository,
     private val profileRepository: UserProfileRepository,
@@ -121,7 +124,15 @@ class ProfileViewModel @Inject constructor(
         historyRepository.observeHistory(),
         profileRepository.profile,
         profileRepository.deviceCount,
-    ) { stats, history, profile, devices ->
+        // Live friend/request counters from the friend graph listeners.
+        combine(
+            friendRepository.friends,
+            friendRepository.incomingRequests,
+            friendRepository.outgoingRequests,
+        ) { friendList, incoming, outgoing ->
+            Triple(friendList.size, incoming.size, outgoing.size)
+        },
+    ) { stats, history, profile, devices, friendCounts ->
         ProfileDashboard(
             activeReminders = stats.enabled,
             // The history flow is bounded to recent entries, so this is a
@@ -129,9 +140,11 @@ class ProfileViewModel @Inject constructor(
             // dedicated counter lands with the statistics work.
             completed = history.count { it.dismissedAt != null },
             shared = profile?.statistics?.sharedReminderCount ?: 0,
-            friends = profile?.statistics?.friendCount ?: 0,
+            friends = friendCounts.first,
             family = profile?.statistics?.familyCount ?: 0,
             devices = devices,
+            incomingRequests = friendCounts.second,
+            outgoingRequests = friendCounts.third,
             accountAgeDays = profile?.privateProfile?.memberSince?.let { since ->
                 Duration.between(since, timeProvider.now()).toDays().coerceAtLeast(0)
             },

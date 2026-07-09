@@ -673,6 +673,36 @@
     <string name="profile_theme_sunset">Sunset</string>
     <string name="profile_theme_aurora">Aurora</string>
     <string name="profile_theme_emerald">Emerald</string>
+    <!-- Friends -->
+    <string name="nav_friends">Friends</string>
+    <string name="friends_section_find">Find people</string>
+    <string name="friends_search_hint">Search by @username or name</string>
+    <string name="friends_search_suggestion">Find people by their @username — exactly as it appears on their profile. Suggestions and popular usernames arrive with a future update.</string>
+    <string name="friends_search_empty">Nobody found. Usernames match from the start — try the first letters.</string>
+    <string name="friends_section_incoming">Incoming requests</string>
+    <string name="friends_section_outgoing">Outgoing requests</string>
+    <string name="friends_section_friends">My friends</string>
+    <string name="friends_section_blocked">Blocked users</string>
+    <string name="friends_blocked_placeholder">Blocking arrives with a future update</string>
+    <string name="friends_list_empty">No friends yet. Find people above and send your first request.</string>
+    <string name="friends_accept">Accept</string>
+    <string name="friends_reject">Reject</string>
+    <string name="friends_cancel_request">Cancel request</string>
+    <string name="friends_remove">Remove</string>
+    <string name="friends_view_profile">View</string>
+    <string name="friends_add">Add friend</string>
+    <string name="friends_request_sent_at">Sent %1$s</string>
+    <string name="friends_public_profile_title">Profile</string>
+    <string name="friends_state_self">This is you.</string>
+    <string name="friends_state_pending">Pending</string>
+    <string name="friends_state_request_sent">Request sent</string>
+    <string name="friends_state_friends">Friends</string>
+    <string name="friends_error_self">You can\'t send a friend request to yourself.</string>
+    <string name="friends_error_already_friends">You\'re already friends.</string>
+    <string name="friends_error_pending">There\'s already a pending request between you.</string>
+    <string name="profile_stat_incoming">Incoming requests</string>
+    <string name="profile_stat_outgoing">Outgoing requests</string>
+
     <!-- Reminder reliability -->
     <string name="settings_reliability_row">Reminder reliability</string>
     <string name="settings_reliability_row_subtitle">Check every permission reminders depend on and run a delivery test</string>

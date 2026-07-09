@@ -3,12 +3,14 @@ package com.alertnotes.core.navigation
 import androidx.annotation.StringRes
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Notifications
@@ -45,6 +47,12 @@ enum class TopLevelDestination(
         selectedIcon = Icons.Filled.Person,
         unselectedIcon = Icons.Outlined.Person,
         labelRes = R.string.nav_profile,
+    ),
+    FRIENDS(
+        route = FriendsRoute,
+        selectedIcon = Icons.Filled.Group,
+        unselectedIcon = Icons.Outlined.Group,
+        labelRes = R.string.nav_friends,
     ),
     CALENDAR(
         route = CalendarRoute,

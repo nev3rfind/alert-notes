@@ -19,6 +19,13 @@ data object RemindersRoute
 data object ProfileRoute
 
 @Serializable
+data object FriendsRoute
+
+/** Another user's public profile. */
+@Serializable
+data class PublicProfileRoute(val uid: String)
+
+@Serializable
 data object SettingsRoute
 
 @Serializable

@@ -23,6 +23,8 @@ import com.alertnotes.features.home.HomeScreen
 import com.alertnotes.features.profile.ProfileScreen
 import com.alertnotes.features.reminders.RemindersScreen
 import com.alertnotes.features.reminders.editor.ReminderEditorScreen
+import com.alertnotes.features.friends.FriendsScreen
+import com.alertnotes.features.friends.PublicProfileScreen
 import com.alertnotes.features.settings.ReliabilityScreen
 import com.alertnotes.features.settings.SettingsScreen
 
@@ -102,6 +104,14 @@ fun AlertNotesNavHost(
             ProfileScreen(
                 onOpenSettings = { navController.navigateToTopLevel(SettingsRoute) },
             )
+        }
+        composable<FriendsRoute> {
+            FriendsScreen(
+                onOpenUser = { uid -> navController.navigate(PublicProfileRoute(uid)) },
+            )
+        }
+        composable<PublicProfileRoute> {
+            PublicProfileScreen(onNavigateBack = navController::navigateUp)
         }
         composable<SettingsRoute> {
             SettingsScreen(
