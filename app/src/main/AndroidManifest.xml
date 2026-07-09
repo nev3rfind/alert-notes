@@ -3,9 +3,17 @@
 
     <!-- Rebuild alarms after a reboot. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-    <!-- Fire reminders at their exact time (user-grantable on Android 12+;
-         the scheduler degrades to inexact alarms when not granted). -->
-    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <!-- Fire reminders at their exact time. Alarms are this app's core
+         function, so on Android 13+ USE_EXACT_ALARM applies (granted
+         automatically, cannot be revoked); SCHEDULE_EXACT_ALARM covers
+         Android 12 where it is the only option. -->
+    <uses-permission
+        android:name="android.permission.SCHEDULE_EXACT_ALARM"
+        android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <!-- Keep the CPU awake for the seconds between alarm delivery and the
+         alert appearing on screen. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- Surface due reminders when the app is in the background. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Alarm-style reminders may take over the screen when due. -->

@@ -29,6 +29,7 @@ import javax.inject.Singleton
 class ReminderNotifier @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val logger: AppLogger,
+    private val diagnostics: ReliabilityDiagnostics,
 ) {
 
     /** Entry that last made noise; re-posts of it stay silent. */
@@ -68,10 +69,15 @@ class ReminderNotifier @Inject constructor(
         )
     }
 
-    fun showAlert(alert: ActiveAlert) {
+    /** Returns true when the notification was actually handed to the system. */
+    fun showAlert(alert: ActiveAlert): Boolean {
         if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) {
             logger.w(TAG, "Notifications disabled — cannot surface alert ${alert.entryId}")
-            return
+            diagnostics.log(
+                ReliabilityDiagnostics.STAGE_PERMISSION,
+                "Notifications DISABLED — entry ${alert.entryId} has no surface",
+            )
+            return false
         }
         val reminder = alert.reminder
         val channel = if (reminder.soundEnabled || reminder.vibrationEnabled) {
@@ -115,14 +121,38 @@ class ReminderNotifier @Inject constructor(
             // NONE acknowledgement: allow direct dismissal from the shade.
             builder.setDeleteIntent(dismissIntent)
         }
-        if ((reminder.wakeScreen || reminder.showOnLockScreen) && canUseFullScreenIntent()) {
-            builder.setFullScreenIntent(contentIntent, true)
+        if (reminder.wakeScreen || reminder.showOnLockScreen) {
+            if (canUseFullScreenIntent()) {
+                builder.setFullScreenIntent(contentIntent, true)
+                diagnostics.log(
+                    ReliabilityDiagnostics.STAGE_FULL_SCREEN,
+                    "Entry ${alert.entryId}: full-screen intent attached",
+                )
+            } else {
+                diagnostics.log(
+                    ReliabilityDiagnostics.STAGE_PERMISSION,
+                    "Full-screen intents NOT permitted — entry ${alert.entryId} " +
+                        "degrades to heads-up (enable in Reminder Reliability)",
+                )
+            }
         }
 
-        runCatching {
+        return runCatching {
             NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, builder.build())
             lastAlertedEntryId = alert.entryId
-        }.onFailure { logger.e(TAG, "Failed to post alert notification", it) }
+            diagnostics.log(
+                ReliabilityDiagnostics.STAGE_NOTIFIED,
+                "Entry ${alert.entryId}: notification posted",
+            )
+            true
+        }.getOrElse {
+            logger.e(TAG, "Failed to post alert notification", it)
+            diagnostics.log(
+                ReliabilityDiagnostics.STAGE_NOTIFIED,
+                "Entry ${alert.entryId}: post FAILED (${it.message})",
+            )
+            false
+        }
     }
 
     fun cancel() {

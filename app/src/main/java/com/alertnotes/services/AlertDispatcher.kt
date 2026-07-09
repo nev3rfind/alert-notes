@@ -50,6 +50,7 @@ class AlertDispatcher @Inject constructor(
     private val overlayEngine: AlertOverlayEngine,
     @param:ApplicationScope private val scope: CoroutineScope,
     private val logger: AppLogger,
+    private val diagnostics: ReliabilityDiagnostics,
 ) {
 
     private val isAppForeground = MutableStateFlow(false)
@@ -113,15 +114,99 @@ class AlertDispatcher @Inject constructor(
                 // notification only once the overlay is actually attached,
                 // and fall back to it if attaching failed.
                 if (shown) {
+                    diagnostics.log(
+                        ReliabilityDiagnostics.STAGE_ROUTED,
+                        "Entry ${alert.entryId}: overlay over current app",
+                    )
                     notifier.cancel()
                 } else {
                     logger.w(TAG, "Overlay attach failed — falling back to notification")
-                    notifier.showAlert(alert)
+                    diagnostics.log(
+                        ReliabilityDiagnostics.STAGE_OVERLAY,
+                        "Entry ${alert.entryId}: attach FAILED — notification fallback",
+                    )
+                    showNotificationWithRetry(alert)
+                }
+            }
+
+            // Device in use but this reminder can't overlay (never-overlay
+            // preference or biometric prompt needed). With the overlay
+            // permission granted the app holds Android's documented
+            // background-activity-launch exemption — take the user straight
+            // to AlertActivity instead of hoping they notice a heads-up.
+            screenUsable && Settings.canDrawOverlays(context) -> {
+                overlayEngine.hide()
+                if (launchAlertActivity(alert)) {
+                    notifier.cancel()
+                } else {
+                    showNotificationWithRetry(alert)
                 }
             }
 
             else -> {
                 overlayEngine.hide()
+                if (screenUsable) {
+                    // In use, but no overlay permission: Android will only
+                    // show a heads-up here by design. Record the reason so
+                    // the Reliability screen can point at the missing grant.
+                    diagnostics.log(
+                        ReliabilityDiagnostics.STAGE_PERMISSION,
+                        "Display over other apps not granted — " +
+                            "interruption degrades to a heads-up notification",
+                    )
+                }
+                diagnostics.log(
+                    ReliabilityDiagnostics.STAGE_ROUTED,
+                    "Entry ${alert.entryId}: notification path " +
+                        "(screenUsable=$screenUsable)",
+                )
+                showNotificationWithRetry(alert)
+            }
+        }
+    }
+
+    /**
+     * Direct full-screen launch while the user is mid-something-else — the
+     * phone-call pattern. Only attempted when the overlay permission grants
+     * the background-launch exemption, so it either works or we know why.
+     */
+    private fun launchAlertActivity(alert: ActiveAlert): Boolean = runCatching {
+        context.startActivity(
+            com.alertnotes.AlertActivity.intent(
+                context,
+                alert.reminder.wakeScreen,
+                alert.reminder.showOnLockScreen,
+            ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+        diagnostics.log(
+            ReliabilityDiagnostics.STAGE_FULL_SCREEN,
+            "Entry ${alert.entryId}: AlertActivity launched directly",
+        )
+        true
+    }.getOrElse { throwable ->
+        logger.e(TAG, "Direct AlertActivity launch failed", throwable)
+        diagnostics.log(
+            ReliabilityDiagnostics.STAGE_FULL_SCREEN,
+            "Entry ${alert.entryId}: direct launch FAILED (${throwable.message})",
+        )
+        false
+    }
+
+    /**
+     * Failsafe: a reminder must never vanish because one notify() call was
+     * unlucky. One delayed retry covers transient NotificationManager
+     * hiccups; both attempts are recorded.
+     */
+    private fun showNotificationWithRetry(alert: ActiveAlert) {
+        if (notifier.showAlert(alert)) return
+        scope.launch(Dispatchers.Main) {
+            kotlinx.coroutines.delay(NOTIFY_RETRY_DELAY_MILLIS)
+            // Only retry if this alert is still the active one.
+            if (presenter.activeAlert.value?.entryId == alert.entryId) {
+                diagnostics.log(
+                    ReliabilityDiagnostics.STAGE_NOTIFIED,
+                    "Entry ${alert.entryId}: retrying notification post",
+                )
                 notifier.showAlert(alert)
             }
         }
@@ -146,5 +231,6 @@ class AlertDispatcher @Inject constructor(
 
     private companion object {
         const val TAG = "AlertDispatcher"
+        const val NOTIFY_RETRY_DELAY_MILLIS = 1_000L
     }
 }

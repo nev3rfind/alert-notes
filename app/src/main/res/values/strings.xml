@@ -673,6 +673,28 @@
     <string name="profile_theme_sunset">Sunset</string>
     <string name="profile_theme_aurora">Aurora</string>
     <string name="profile_theme_emerald">Emerald</string>
+    <!-- Reminder reliability -->
+    <string name="settings_reliability_row">Reminder reliability</string>
+    <string name="settings_reliability_row_subtitle">Check every permission reminders depend on and run a delivery test</string>
+    <string name="reliability_title">Reminder reliability</string>
+    <string name="reliability_section_permissions">Required permissions</string>
+    <string name="reliability_permissions_intro">Reminders can only interrupt like an alarm clock when all of these are enabled. Tap Enable to jump straight to the right system setting.</string>
+    <string name="reliability_enable">Enable</string>
+    <string name="reliability_why_notifications">Without this, background reminders have no surface at all.</string>
+    <string name="reliability_why_exact">Fires reminders to the second, even in Doze. On Android 13+ this is granted automatically.</string>
+    <string name="reliability_why_overlay">Lets a due reminder take over the screen while you are inside another app — the single most important grant for interruptions.</string>
+    <string name="reliability_why_full_screen">Lets a reminder wake the screen and appear over the lock screen, like an incoming call.</string>
+    <string name="reliability_why_battery">Stops aggressive battery managers from delaying or killing reminder delivery.</string>
+    <string name="reliability_section_test">Delivery test</string>
+    <string name="reliability_test_intro">Schedules a real one-time reminder through the full production pipeline. Lock the screen or switch to another app to test interruption.</string>
+    <string name="reliability_test_10s">In 10s</string>
+    <string name="reliability_test_30s">In 30s</string>
+    <string name="reliability_test_1m">In 1 min</string>
+    <string name="reliability_test_hint">The test appears in your reminder list like any other reminder and can be deleted afterwards.</string>
+    <string name="reliability_test_reminder_title">Reliability test</string>
+    <string name="reliability_section_log">Pipeline log</string>
+    <string name="reliability_log_empty">No events yet. Schedule a delivery test above — every stage from scheduling to the full-screen launch will be traced here.</string>
+
     <string name="profile_avatar_editor_title">Adjust photo</string>
     <string name="profile_avatar_editor_hint">Pinch to zoom, drag to reposition</string>
     <string name="profile_avatar_rotate">Rotate</string>

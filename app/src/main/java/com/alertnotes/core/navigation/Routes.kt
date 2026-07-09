@@ -30,6 +30,9 @@ data object AboutRoute
 @Serializable
 data object HistoryRoute
 
+@Serializable
+data object ReliabilityRoute
+
 /**
  * Full-screen reminder editor; [reminderId] 0 (= Reminder.NEW_ID) creates.
  * [initialEpochDay] pre-fills a new reminder's date (-1 = none) — used by

@@ -23,6 +23,7 @@ import com.alertnotes.features.home.HomeScreen
 import com.alertnotes.features.profile.ProfileScreen
 import com.alertnotes.features.reminders.RemindersScreen
 import com.alertnotes.features.reminders.editor.ReminderEditorScreen
+import com.alertnotes.features.settings.ReliabilityScreen
 import com.alertnotes.features.settings.SettingsScreen
 
 private const val TRANSITION_MILLIS = 260
@@ -107,7 +108,11 @@ fun AlertNotesNavHost(
                 onOpenBackup = { navController.navigate(BackupRoute) },
                 onOpenAbout = { navController.navigate(AboutRoute) },
                 onOpenHistory = { navController.navigate(HistoryRoute) },
+                onOpenReliability = { navController.navigate(ReliabilityRoute) },
             )
+        }
+        composable<ReliabilityRoute> {
+            ReliabilityScreen(onNavigateBack = navController::navigateUp)
         }
         composable<HistoryRoute> {
             HistoryScreen(onNavigateBack = navController::navigateUp)

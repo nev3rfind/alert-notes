@@ -31,6 +31,7 @@ import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.PauseCircle
+import androidx.compose.material.icons.outlined.Verified
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -84,6 +85,7 @@ fun SettingsScreen(
     onOpenBackup: () -> Unit,
     onOpenAbout: () -> Unit,
     onOpenHistory: () -> Unit,
+    onOpenReliability: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val preferences by viewModel.preferences.collectAsStateWithLifecycle()
@@ -190,6 +192,13 @@ fun SettingsScreen(
                 }
                 item {
                     SectionCard(title = stringResource(R.string.settings_section_permissions)) {
+                        AppListItem(
+                            title = stringResource(R.string.settings_reliability_row),
+                            supportingText = stringResource(R.string.settings_reliability_row_subtitle),
+                            leadingIcon = Icons.Outlined.Verified,
+                            onClick = onOpenReliability,
+                            trailingContent = { TrailingChevron() },
+                        )
                         permissionStates.forEach { state ->
                             PermissionRow(state = state, onClick = { onPermissionClick(state) })
                         }

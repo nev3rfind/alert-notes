@@ -43,10 +43,17 @@ class AlertActivity : FragmentActivity() {
     @Inject
     lateinit var secondTicker: SecondTicker
 
+    @Inject
+    lateinit var diagnostics: com.alertnotes.services.ReliabilityDiagnostics
+
     private val mainViewModel: MainViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        diagnostics.log(
+            com.alertnotes.services.ReliabilityDiagnostics.STAGE_FULL_SCREEN,
+            "AlertActivity created (fresh launch)",
+        )
         applyLockScreenFlags(
             showWhenLocked = intent.getBooleanExtra(EXTRA_SHOW_WHEN_LOCKED, true),
             turnScreenOn = intent.getBooleanExtra(EXTRA_TURN_SCREEN_ON, true),
