@@ -1,9 +1,5 @@
 package com.alertnotes.features.account
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,6 +35,7 @@ import com.alertnotes.R
 import com.alertnotes.core.ui.components.PrimaryButton
 import com.alertnotes.core.ui.components.PrimaryCard
 import com.alertnotes.core.ui.components.SecondaryButton
+import com.alertnotes.core.ui.components.StaggeredEntrance
 import com.alertnotes.core.ui.theme.spacing
 
 /**
@@ -66,7 +63,7 @@ fun ModeSelectionScreen(
             modifier = Modifier.widthIn(max = 560.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            EnterTransition(visible = entered, delayMillis = 0) {
+            StaggeredEntrance(visible = entered, delayMillis = 0) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
                         text = stringResource(R.string.mode_select_title),
@@ -84,7 +81,7 @@ fun ModeSelectionScreen(
                 }
             }
             Spacer(modifier = Modifier.height(MaterialTheme.spacing.extraLarge))
-            EnterTransition(visible = entered, delayMillis = 120) {
+            StaggeredEntrance(visible = entered, delayMillis = 120) {
                 ModeCard(
                     icon = Icons.Outlined.Smartphone,
                     title = stringResource(R.string.mode_select_offline_title),
@@ -104,7 +101,7 @@ fun ModeSelectionScreen(
                 }
             }
             Spacer(modifier = Modifier.height(MaterialTheme.spacing.large))
-            EnterTransition(visible = entered, delayMillis = 240) {
+            StaggeredEntrance(visible = entered, delayMillis = 240) {
                 ModeCard(
                     icon = Icons.Outlined.Cloud,
                     title = stringResource(R.string.mode_select_online_title),
@@ -125,7 +122,7 @@ fun ModeSelectionScreen(
                 }
             }
             Spacer(modifier = Modifier.height(MaterialTheme.spacing.large))
-            EnterTransition(visible = entered, delayMillis = 360) {
+            StaggeredEntrance(visible = entered, delayMillis = 360) {
                 Text(
                     text = stringResource(R.string.mode_select_footer),
                     style = MaterialTheme.typography.bodySmall,
@@ -134,24 +131,6 @@ fun ModeSelectionScreen(
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun EnterTransition(
-    visible: Boolean,
-    delayMillis: Int,
-    content: @Composable () -> Unit,
-) {
-    AnimatedVisibility(
-        visible = visible,
-        enter = fadeIn(animationSpec = tween(durationMillis = 350, delayMillis = delayMillis)) +
-            slideInVertically(
-                animationSpec = tween(durationMillis = 350, delayMillis = delayMillis),
-                initialOffsetY = { it / 6 },
-            ),
-    ) {
-        content()
     }
 }
 

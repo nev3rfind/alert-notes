@@ -33,6 +33,9 @@ interface AuthRepository {
 
     suspend fun sendPasswordReset(email: String)
 
-    /** Ends the session. Local data is never touched. */
-    fun signOut()
+    /**
+     * Ends the session, marking the public profile offline first (while the
+     * write is still authorized). Local data is never touched.
+     */
+    suspend fun signOut()
 }

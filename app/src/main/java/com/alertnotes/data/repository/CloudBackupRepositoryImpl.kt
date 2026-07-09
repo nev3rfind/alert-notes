@@ -5,6 +5,7 @@ import com.alertnotes.core.util.TimeProvider
 import com.alertnotes.data.backup.BackupFile
 import com.alertnotes.data.backup.toBackup
 import com.alertnotes.data.dao.ReminderDao
+import com.alertnotes.data.remote.FirestoreSchema
 import com.alertnotes.domain.repository.CloudBackupRepository
 import com.alertnotes.domain.repository.CloudUploadResult
 import com.google.firebase.auth.FirebaseAuth
@@ -42,9 +43,8 @@ class CloudBackupRepositoryImpl @Inject constructor(
         return runCatching {
             val reminders = reminderDao.getAllForBackup()
             val uploadedAt = timeProvider.now().toEpochMilli()
-            val collection = firestore.collection(USERS_COLLECTION)
-                .document(uid)
-                .collection(REMINDERS_COLLECTION)
+            val userDocument = firestore.collection(FirestoreSchema.USERS).document(uid)
+            val collection = userDocument.collection(FirestoreSchema.REMINDERS)
             // Firestore caps a WriteBatch at 500 operations.
             reminders.chunked(MAX_BATCH_SIZE).forEach { chunk ->
                 firestore.runBatch { batch ->
@@ -62,8 +62,10 @@ class CloudBackupRepositoryImpl @Inject constructor(
                 "reminderUploadCount" to reminders.size,
                 "reminderUploadedAt" to FieldValue.serverTimestamp(),
             )
-            firestore.collection(USERS_COLLECTION)
-                .document(uid)
+            // Application bookkeeping belongs in the metadata section, not
+            // on the anchor document.
+            userDocument.collection(FirestoreSchema.SECTION_METADATA)
+                .document(FirestoreSchema.SECTION_DOC)
                 .set(summary, SetOptions.merge())
                 .await()
             logger.i(TAG, "Uploaded ${reminders.size} reminders to cloud backup")
@@ -76,8 +78,6 @@ class CloudBackupRepositoryImpl @Inject constructor(
 
     private companion object {
         const val TAG = "CloudBackupRepository"
-        const val USERS_COLLECTION = "users"
-        const val REMINDERS_COLLECTION = "reminders"
         const val MAX_BATCH_SIZE = 450
     }
 }

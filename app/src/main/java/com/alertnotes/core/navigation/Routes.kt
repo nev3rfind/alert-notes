@@ -16,6 +16,9 @@ data object CalendarRoute
 data object RemindersRoute
 
 @Serializable
+data object ProfileRoute
+
+@Serializable
 data object SettingsRoute
 
 @Serializable

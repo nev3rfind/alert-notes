@@ -1,5 +1,6 @@
 package com.alertnotes.core.navigation
 
+import androidx.activity.compose.LocalActivity
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -55,6 +56,10 @@ fun AlertNotesApp(createReminderRequestId: Int = 0) {
         currentDestination.isDestinationSelected(destination)
     }
     val useNavigationRail = windowWidthClass != WindowWidthClass.Compact
+    // Exit closes only the UI — AlarmManager schedules and reminder data are
+    // untouched, exactly like the Settings exit row.
+    val exitActivity = LocalActivity.current
+    val onExit: () -> Unit = { exitActivity?.finishAndRemoveTask() }
 
     Row(modifier = Modifier.fillMaxSize()) {
         if (useNavigationRail) {
@@ -62,6 +67,7 @@ fun AlertNotesApp(createReminderRequestId: Int = 0) {
                 destinations = TopLevelDestination.entries,
                 isSelected = { currentDestination.isDestinationSelected(it) },
                 onNavigate = { navController.navigateToTopLevel(it.route) },
+                onExit = onExit,
             )
         }
         Scaffold(
@@ -77,6 +83,7 @@ fun AlertNotesApp(createReminderRequestId: Int = 0) {
                             destinations = TopLevelDestination.entries,
                             isSelected = { currentDestination.isDestinationSelected(it) },
                             onNavigate = { navController.navigateToTopLevel(it.route) },
+                            onExit = onExit,
                         )
                     }
                 }

@@ -1,6 +1,7 @@
 package com.alertnotes.features.account
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -14,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -64,11 +66,13 @@ class ModeStatusViewModel @Inject constructor(
  * Compact "📱 offline / ☁ online" indicator for navigation surfaces (the
  * home dashboard header). Self-contained on purpose: dropping it into a
  * screen adds no state to that screen's ViewModel. Renders nothing until the
- * mode choice is made — the first-run gate covers that window anyway.
+ * mode choice is made — the first-run gate covers that window anyway. Pass
+ * [onClick] to make the chip a shortcut to wherever the mode is managed.
  */
 @Composable
 fun ModeStatusBadge(
     modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
     viewModel: ModeStatusViewModel = hiltViewModel(),
 ) {
     val status by viewModel.status.collectAsStateWithLifecycle()
@@ -82,8 +86,17 @@ fun ModeStatusBadge(
     } else {
         stringResource(R.string.settings_mode_offline_subtitle)
     }
+    val clickableModifier = if (onClick != null) {
+        // Clip first so the ripple respects the pill shape.
+        Modifier
+            .clip(MaterialTheme.shapes.extraLarge)
+            .clickable(onClick = onClick)
+    } else {
+        Modifier
+    }
     Row(
         modifier = modifier
+            .then(clickableModifier)
             .background(
                 color = MaterialTheme.colorScheme.surfaceContainerLow,
                 shape = MaterialTheme.shapes.extraLarge,

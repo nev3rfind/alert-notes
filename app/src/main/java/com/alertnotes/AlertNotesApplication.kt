@@ -5,6 +5,7 @@ import com.alertnotes.core.util.AppLogger
 import com.alertnotes.di.ApplicationScope
 import com.alertnotes.domain.scheduling.ReminderSchedulingCoordinator
 import com.alertnotes.services.AlertDispatcher
+import com.alertnotes.services.PresenceManager
 import com.google.firebase.FirebaseApp
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
@@ -28,10 +29,15 @@ class AlertNotesApplication : Application() {
     @Inject
     lateinit var logger: AppLogger
 
+    /** Mirrors foreground state to the online profile; no-op offline. */
+    @Inject
+    lateinit var presenceManager: PresenceManager
+
     override fun onCreate() {
         super.onCreate()
         verifyFirebase()
         alertDispatcher.start()
+        presenceManager.start()
         // Reconcile alarms on every process start: a force-stop (aggressive
         // battery managers, "Force stop" in app info) silently cancels every
         // AlarmManager alarm, and boot/time receivers never fire for that

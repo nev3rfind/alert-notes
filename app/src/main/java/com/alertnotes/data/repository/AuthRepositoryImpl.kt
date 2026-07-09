@@ -1,18 +1,15 @@
 package com.alertnotes.data.repository
 
 import com.alertnotes.core.util.AppLogger
+import com.alertnotes.data.remote.DeviceRemoteDataSource
 import com.alertnotes.data.remote.UserProfileRemoteDataSource
 import com.alertnotes.domain.model.AuthError
 import com.alertnotes.domain.model.AuthException
 import com.alertnotes.domain.model.AuthUser
 import com.alertnotes.domain.repository.AuthRepository
-import com.google.firebase.FirebaseNetworkException
-import com.google.firebase.FirebaseTooManyRequestsException
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.auth.FirebaseAuthException
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.userProfileChangeRequest
-import com.google.firebase.firestore.FirebaseFirestoreException
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.channels.awaitClose
@@ -24,6 +21,7 @@ import kotlinx.coroutines.tasks.await
 class AuthRepositoryImpl @Inject constructor(
     private val auth: FirebaseAuth,
     private val profileDataSource: UserProfileRemoteDataSource,
+    private val deviceDataSource: DeviceRemoteDataSource,
     private val logger: AppLogger,
 ) : AuthRepository {
 
@@ -72,6 +70,8 @@ class AuthRepositoryImpl @Inject constructor(
             rollbackRegistration(user)
             throw exception
         }
+        registerDevice(user)
+        markOnline(user)
         // i-level logs ship in release builds and must stay free of user
         // data, so no uid/email here.
         logger.i(TAG, "Account registered")
@@ -85,6 +85,8 @@ class AuthRepositoryImpl @Inject constructor(
         // Bookkeeping only — a failed timestamp write must not fail login.
         runCatching { profileDataSource.touchLastLogin(user.uid) }
             .onFailure { logger.w(TAG, "lastLogin update failed", it) }
+        registerDevice(user)
+        markOnline(user)
         logger.i(TAG, "Signed in")
         return user.toAuthUser()
     }
@@ -93,7 +95,12 @@ class AuthRepositoryImpl @Inject constructor(
         runAuthOp { auth.sendPasswordResetEmail(email).await() }
     }
 
-    override fun signOut() {
+    override suspend fun signOut() {
+        // Best-effort farewell while the rules still allow the write.
+        auth.currentUser?.let { user ->
+            runCatching { profileDataSource.setPresence(user.uid, online = false) }
+                .onFailure { logger.w(TAG, "Offline presence write failed", it) }
+        }
         auth.signOut()
         logger.i(TAG, "Signed out")
     }
@@ -103,13 +110,20 @@ class AuthRepositoryImpl @Inject constructor(
             .onFailure { logger.e(TAG, "Registration rollback failed", it) }
     }
 
-    /** Runs [block], translating provider exceptions to [AuthException]. */
-    private inline fun <T> runAuthOp(block: () -> T): T = try {
-        block()
-    } catch (exception: AuthException) {
-        throw exception
-    } catch (exception: Exception) {
-        throw AuthException(exception.toAuthError(), exception)
+    /**
+     * Adds this device to the account's device registry. Bookkeeping like
+     * lastLogin: a failure is logged, never surfaced — the session is
+     * already established and must not be torn down over it.
+     */
+    private suspend fun registerDevice(user: FirebaseUser) {
+        runCatching { deviceDataSource.registerCurrentDevice(user.uid) }
+            .onFailure { logger.w(TAG, "Device registration failed", it) }
+    }
+
+    /** Presence bookkeeping — the app is in the foreground when this runs. */
+    private suspend fun markOnline(user: FirebaseUser) {
+        runCatching { profileDataSource.setPresence(user.uid, online = true) }
+            .onFailure { logger.w(TAG, "Online presence write failed", it) }
     }
 
     private fun FirebaseUser.toAuthUser(): AuthUser = AuthUser(
@@ -117,34 +131,6 @@ class AuthRepositoryImpl @Inject constructor(
         email = email.orEmpty(),
         displayName = displayName.orEmpty(),
     )
-
-    private fun Exception.toAuthError(): AuthError = when (this) {
-        is FirebaseNetworkException -> AuthError.NETWORK
-        is FirebaseTooManyRequestsException -> AuthError.TOO_MANY_REQUESTS
-        is FirebaseFirestoreException -> when (code) {
-            FirebaseFirestoreException.Code.UNAVAILABLE -> AuthError.NETWORK
-            else -> AuthError.UNKNOWN
-        }
-
-        is FirebaseAuthException -> when (errorCode) {
-            "ERROR_INVALID_EMAIL" -> AuthError.INVALID_EMAIL
-            // Firebase reports all three for bad email/password pairs,
-            // depending on backend configuration.
-            "ERROR_WRONG_PASSWORD",
-            "ERROR_INVALID_CREDENTIAL",
-            "ERROR_INVALID_LOGIN_CREDENTIALS",
-            -> AuthError.INVALID_CREDENTIALS
-
-            "ERROR_USER_NOT_FOUND" -> AuthError.USER_NOT_FOUND
-            "ERROR_EMAIL_ALREADY_IN_USE" -> AuthError.EMAIL_ALREADY_IN_USE
-            "ERROR_WEAK_PASSWORD" -> AuthError.WEAK_PASSWORD
-            "ERROR_TOO_MANY_REQUESTS" -> AuthError.TOO_MANY_REQUESTS
-            "ERROR_USER_DISABLED" -> AuthError.ACCOUNT_DISABLED
-            else -> AuthError.UNKNOWN
-        }
-
-        else -> AuthError.UNKNOWN
-    }
 
     private companion object {
         const val TAG = "AuthRepository"

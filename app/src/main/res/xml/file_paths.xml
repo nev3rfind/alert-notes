@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Shared only with the camera app while capturing a new avatar. -->
+<paths>
+    <cache-path
+        name="camera"
+        path="camera/" />
+</paths>

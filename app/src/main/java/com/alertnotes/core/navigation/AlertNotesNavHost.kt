@@ -20,6 +20,7 @@ import com.alertnotes.features.backup.BackupScreen
 import com.alertnotes.features.calendar.CalendarScreen
 import com.alertnotes.features.history.HistoryScreen
 import com.alertnotes.features.home.HomeScreen
+import com.alertnotes.features.profile.ProfileScreen
 import com.alertnotes.features.reminders.RemindersScreen
 import com.alertnotes.features.reminders.editor.ReminderEditorScreen
 import com.alertnotes.features.settings.SettingsScreen
@@ -94,6 +95,11 @@ fun AlertNotesNavHost(
                 reminderId = route.reminderId,
                 initialEpochDay = route.initialEpochDay,
                 onClose = navController::navigateUp,
+            )
+        }
+        composable<ProfileRoute> {
+            ProfileScreen(
+                onOpenSettings = { navController.navigateToTopLevel(SettingsRoute) },
             )
         }
         composable<SettingsRoute> {

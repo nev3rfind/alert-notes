@@ -12,12 +12,14 @@ import com.alertnotes.data.repository.ReminderHistoryRepositoryImpl
 import com.alertnotes.data.repository.ReminderQueueRepositoryImpl
 import com.alertnotes.data.repository.ReminderRepositoryImpl
 import com.alertnotes.data.repository.SettingsRepositoryImpl
+import com.alertnotes.data.repository.UserProfileRepositoryImpl
 import com.alertnotes.domain.repository.AuthRepository
 import com.alertnotes.domain.repository.CloudBackupRepository
 import com.alertnotes.domain.repository.ReminderHistoryRepository
 import com.alertnotes.domain.repository.ReminderQueueRepository
 import com.alertnotes.domain.repository.ReminderRepository
 import com.alertnotes.domain.repository.SettingsRepository
+import com.alertnotes.domain.repository.UserProfileRepository
 import com.alertnotes.domain.scheduling.ReminderScheduler
 import com.alertnotes.domain.scheduling.ScheduleEvents
 import com.alertnotes.services.AlarmManagerReminderScheduler
@@ -53,6 +55,9 @@ abstract class BindingsModule {
 
     @Binds
     abstract fun bindCloudBackupRepository(impl: CloudBackupRepositoryImpl): CloudBackupRepository
+
+    @Binds
+    abstract fun bindUserProfileRepository(impl: UserProfileRepositoryImpl): UserProfileRepository
 
     @Binds
     abstract fun bindReminderScheduler(impl: AlarmManagerReminderScheduler): ReminderScheduler

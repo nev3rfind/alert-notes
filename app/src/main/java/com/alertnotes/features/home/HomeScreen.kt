@@ -107,7 +107,7 @@ fun HomeScreen(
                 verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.extraLarge),
             ) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
-                    DashboardHeader()
+                    DashboardHeader(onOpenSettings = onOpenSettings)
                 }
                 uiState.pausedUntil?.let { pausedUntil ->
                     item(span = { GridItemSpan(maxLineSpan) }) {
@@ -173,7 +173,7 @@ fun HomeScreen(
 // region Header & hero cards
 
 @Composable
-private fun DashboardHeader() {
+private fun DashboardHeader(onOpenSettings: () -> Unit) {
     val greetingRes = remember { greetingForHour(LocalTime.now().hour) }
     val today = remember {
         LocalDate.now().format(
@@ -196,7 +196,12 @@ private fun DashboardHeader() {
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            ModeStatusBadge(modifier = Modifier.padding(top = MaterialTheme.spacing.small))
+            // Tapping the badge jumps to Settings, where the account and
+            // application mode are managed.
+            ModeStatusBadge(
+                modifier = Modifier.padding(top = MaterialTheme.spacing.small),
+                onClick = onOpenSettings,
+            )
         }
         // Live clock: a leaf composable — only this text ticks each second.
         LiveClockText(
