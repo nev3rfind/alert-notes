@@ -426,7 +426,9 @@ class FriendRepositoryImpl @Inject constructor(
     )
 
     private fun DocumentSnapshot.isPendingInvitation(): Boolean =
-        exists() && getString("status") == FamilyInvitationStatus.PENDING.name
+        exists() &&
+            getString("status") == FamilyInvitationStatus.PENDING.name &&
+            !isExpired()
 
     private fun invitationDocument(fromUid: String, toUid: String): DocumentReference =
         firestore.collection(FirestoreSchema.FAMILY_INVITATIONS).document("${fromUid}_$toUid")
@@ -559,7 +561,21 @@ class FriendRepositoryImpl @Inject constructor(
     }
 
     private fun DocumentSnapshot.isPending(): Boolean =
-        exists() && getString("status") == FriendRequestStatus.PENDING.name
+        exists() &&
+            getString("status") == FriendRequestStatus.PENDING.name &&
+            !isExpired()
+
+    /**
+     * A doc still stored as PENDING but past the TTL counts as expired
+     * everywhere: it neither blocks a fresh re-send nor is actionable. This
+     * is what lets create → cancel/decline/expire → send-again work without
+     * any manual Firestore cleanup (the reservation id is reused and the
+     * terminal/expired doc is overwritten with a fresh PENDING).
+     */
+    private fun DocumentSnapshot.isExpired(): Boolean {
+        val createdAt = instantField("createdAt") ?: return false
+        return createdAt.isBefore(Instant.now().minus(REQUEST_TTL))
+    }
 
     private fun requestDocument(fromUid: String, toUid: String): DocumentReference =
         firestore.collection(FirestoreSchema.FRIEND_REQUESTS).document("${fromUid}_$toUid")
