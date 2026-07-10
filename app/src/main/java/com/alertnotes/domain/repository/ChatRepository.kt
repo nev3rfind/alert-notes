@@ -24,8 +24,18 @@ interface ChatRepository {
     /** Relationship-gated: only friends or family may message. */
     suspend fun sendMessage(otherUid: String, text: String)
 
-    /** Inserts a distinct system message narrating a sharing event. */
-    suspend fun postSystemMessage(otherUid: String, kind: SystemMessageKind)
+    /**
+     * Inserts a distinct system message narrating a sharing event. When
+     * [shareId] is provided the message renders as an interactive reminder
+     * card that lives in the history and tracks the share's live status.
+     */
+    suspend fun postSystemMessage(
+        otherUid: String,
+        kind: SystemMessageKind,
+        shareId: String? = null,
+        shareTitle: String = "",
+        shareSchedule: String = "",
+    )
 
     /** Marks the conversation read and zeroes my unread counter. */
     suspend fun markRead(otherUid: String)

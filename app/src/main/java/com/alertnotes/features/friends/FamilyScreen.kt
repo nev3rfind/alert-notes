@@ -38,6 +38,7 @@ import com.alertnotes.core.ui.theme.spacing
 fun FamilyScreen(
     onOpenUser: (String) -> Unit,
     onNavigateBack: () -> Unit,
+    onOpenChat: (String) -> Unit,
     viewModel: FriendsViewModel = hiltViewModel(),
 ) {
     val family by viewModel.family.collectAsStateWithLifecycle()
@@ -122,6 +123,7 @@ fun FamilyScreen(
                                 FamilyMemberRow(
                                     member = member,
                                     onOpen = { onOpenUser(member.uid) },
+                                    onMessage = { onOpenChat(member.uid) },
                                     onRemove = { viewModel.removeFamily(member.uid) },
                                     onPermissions = { permissions ->
                                         viewModel.setFamilyPermissions(member.uid, permissions)

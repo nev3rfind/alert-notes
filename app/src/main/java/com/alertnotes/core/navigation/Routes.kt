@@ -33,6 +33,9 @@ data object SharedRemindersRoute
 @Serializable
 data object InboxRoute
 
+@Serializable
+data object MessagesRoute
+
 /** 1:1 conversation with [otherUid]. */
 @Serializable
 data class ChatRoute(val otherUid: String)

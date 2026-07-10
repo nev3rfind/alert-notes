@@ -20,6 +20,10 @@ data class ChatMessage(
     val status: MessageStatus,
     /** Reply threading arrives later; the field ships now. */
     val replyToId: String? = null,
+    /** When set, this message renders as an interactive reminder card. */
+    val shareId: String? = null,
+    val shareTitle: String = "",
+    val shareSchedule: String = "",
     val createdAt: Instant?,
 )
 

@@ -16,6 +16,7 @@ import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.CloudSync
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Inbox
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Verified
@@ -42,6 +43,7 @@ import com.alertnotes.core.ui.theme.spacing
  */
 @Composable
 fun MoreScreen(
+    onOpenProfile: () -> Unit,
     onOpenCalendar: () -> Unit,
     onOpenHistory: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -73,6 +75,13 @@ fun MoreScreen(
             ) {
                 item {
                     SectionCard(title = stringResource(R.string.more_section_app)) {
+                        AppListItem(
+                            title = stringResource(R.string.nav_profile),
+                            supportingText = stringResource(R.string.more_profile_subtitle),
+                            leadingIcon = Icons.Outlined.Person,
+                            onClick = onOpenProfile,
+                            trailingContent = { Chevron() },
+                        )
                         AppListItem(
                             title = stringResource(R.string.nav_calendar),
                             supportingText = stringResource(R.string.more_calendar_subtitle),

@@ -31,6 +31,7 @@ import com.alertnotes.features.settings.ReliabilityScreen
 import com.alertnotes.features.settings.SettingsScreen
 import com.alertnotes.features.chat.ChatScreen
 import com.alertnotes.features.chat.InboxScreen
+import com.alertnotes.features.chat.MessagesScreen
 import com.alertnotes.features.sharing.ShareReminderScreen
 import com.alertnotes.features.sharing.SharedRemindersScreen
 
@@ -115,6 +116,7 @@ fun AlertNotesNavHost(
         }
         composable<MoreRoute> {
             MoreScreen(
+                onOpenProfile = { navController.navigate(ProfileRoute) },
                 onOpenCalendar = { navController.navigate(CalendarRoute) },
                 onOpenHistory = { navController.navigate(HistoryRoute) },
                 onOpenSettings = { navController.navigate(SettingsRoute) },
@@ -129,16 +131,21 @@ fun AlertNotesNavHost(
             FriendsScreen(
                 onOpenUser = { uid -> navController.navigate(PublicProfileRoute(uid)) },
                 onOpenFamily = { navController.navigate(FamilyRoute) },
+                onOpenChat = { uid -> navController.navigate(ChatRoute(uid)) },
             )
         }
         composable<FamilyRoute> {
             FamilyScreen(
                 onOpenUser = { uid -> navController.navigate(PublicProfileRoute(uid)) },
                 onNavigateBack = navController::navigateUp,
+                onOpenChat = { uid -> navController.navigate(ChatRoute(uid)) },
             )
         }
         composable<PublicProfileRoute> {
-            PublicProfileScreen(onNavigateBack = navController::navigateUp)
+            PublicProfileScreen(
+                onNavigateBack = navController::navigateUp,
+                onOpenChat = { uid -> navController.navigate(ChatRoute(uid)) },
+            )
         }
         composable<SettingsRoute> {
             SettingsScreen(
@@ -159,14 +166,23 @@ fun AlertNotesNavHost(
         }
         composable<InboxRoute> {
             InboxScreen(
-                onOpenUser = { uid -> navController.navigate(PublicProfileRoute(uid)) },
-                onOpenChat = { uid -> navController.navigate(ChatRoute(uid)) },
                 onOpenSharedReminders = { navController.navigate(SharedRemindersRoute) },
+                onOpenFriends = { navController.navigateToTopLevel(FriendsRoute) },
+                onOpenMessages = { navController.navigateToTopLevel(MessagesRoute) },
+            )
+        }
+        composable<MessagesRoute> {
+            MessagesScreen(
+                onOpenChat = { uid -> navController.navigate(ChatRoute(uid)) },
+                onOpenUser = { uid -> navController.navigate(PublicProfileRoute(uid)) },
                 onOpenFriends = { navController.navigateToTopLevel(FriendsRoute) },
             )
         }
         composable<ChatRoute> {
-            ChatScreen(onNavigateBack = navController::navigateUp)
+            ChatScreen(
+                onNavigateBack = navController::navigateUp,
+                onOpenTracking = { navController.navigate(SharedRemindersRoute) },
+            )
         }
         composable<HistoryRoute> {
             HistoryScreen(onNavigateBack = navController::navigateUp)

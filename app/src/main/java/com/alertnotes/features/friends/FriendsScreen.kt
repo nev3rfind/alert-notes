@@ -178,6 +178,7 @@ class FriendsViewModel @Inject constructor(
 fun FriendsScreen(
     onOpenUser: (String) -> Unit,
     onOpenFamily: () -> Unit,
+    onOpenChat: (String) -> Unit,
     viewModel: FriendsViewModel = hiltViewModel(),
 ) {
     val query by viewModel.query.collectAsStateWithLifecycle()
@@ -320,6 +321,9 @@ fun FriendsScreen(
                                     },
                                     onClick = { onOpenUser(friend.uid) },
                                 ) {
+                                    TextButton(onClick = { onOpenChat(friend.uid) }) {
+                                        Text(text = stringResource(R.string.friends_message))
+                                    }
                                     if (!isFamily) {
                                         TextButton(onClick = { viewModel.inviteToFamily(friend.uid) }) {
                                             Text(text = stringResource(R.string.family_invite_short))
@@ -482,6 +486,7 @@ private fun RelationshipBadge(text: String, modifier: Modifier = Modifier) {
 internal fun FamilyMemberRow(
     member: FamilyMember,
     onOpen: () -> Unit,
+    onMessage: () -> Unit,
     onRemove: () -> Unit,
     onPermissions: (FamilyPermissions) -> Unit,
 ) {
@@ -492,6 +497,9 @@ internal fun FamilyMemberRow(
             showLastSeen = member.permissions.canViewLastSeen,
             onClick = onOpen,
         ) {
+            TextButton(onClick = onMessage) {
+                Text(text = stringResource(R.string.friends_message))
+            }
             TextButton(onClick = { expanded = !expanded }) {
                 Text(
                     text = stringResource(

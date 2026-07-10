@@ -771,6 +771,12 @@
     <string name="chat_system_accepted">Reminder accepted</string>
     <string name="chat_system_rejected">Reminder declined</string>
     <string name="chat_system_generic">Reminder update</string>
+    <string name="nav_messages">Messages</string>
+    <string name="friends_message">Message</string>
+    <string name="chat_card_open">Open</string>
+    <string name="more_profile_subtitle">Your account, avatar, and statistics</string>
+    <string name="inbox_all_clear">All caught up — no pending requests or invitations.</string>
+    <string name="messages_empty_action">Find people to message</string>
     <string name="inbox_title">Inbox</string>
     <string name="inbox_row_subtitle">Requests, invitations, and conversations in one place</string>
     <string name="inbox_search_hint">Search conversations</string>

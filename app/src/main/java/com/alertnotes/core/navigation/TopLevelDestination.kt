@@ -2,16 +2,16 @@ package com.alertnotes.core.navigation
 
 import androidx.annotation.StringRes
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChatBubble
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.Notifications
-import androidx.compose.material.icons.outlined.Person
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.alertnotes.R
 
@@ -45,11 +45,11 @@ enum class TopLevelDestination(
         unselectedIcon = Icons.Outlined.Group,
         labelRes = R.string.nav_friends,
     ),
-    PROFILE(
-        route = ProfileRoute,
-        selectedIcon = Icons.Filled.Person,
-        unselectedIcon = Icons.Outlined.Person,
-        labelRes = R.string.nav_profile,
+    MESSAGES(
+        route = MessagesRoute,
+        selectedIcon = Icons.Filled.ChatBubble,
+        unselectedIcon = Icons.Outlined.ChatBubbleOutline,
+        labelRes = R.string.nav_messages,
     ),
     MORE(
         route = MoreRoute,

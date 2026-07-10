@@ -89,10 +89,45 @@ import kotlinx.coroutines.launch
 class ChatViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val chatRepository: ChatRepository,
+    private val sharingRepository: com.alertnotes.domain.repository.ReminderSharingRepository,
     friendRepository: FriendRepository,
 ) : ViewModel() {
 
     val otherUid: String = savedStateHandle.toRoute<ChatRoute>().otherUid
+
+    /** Live shares keyed by id so reminder cards track status in realtime. */
+    val sharesById: StateFlow<Map<String, com.alertnotes.domain.model.ReminderShare>> =
+        kotlinx.coroutines.flow.combine(
+            sharingRepository.incomingShares,
+            sharingRepository.outgoingShares,
+        ) { incoming, outgoing ->
+            (incoming + outgoing).associate { it.share.id to it.share }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+
+    /** Relationship badge for the conversation header. */
+    val isFamily: StateFlow<Boolean> = friendRepository.family
+        .map { members -> members.any { it.uid == otherUid } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    fun acceptShare(share: com.alertnotes.domain.model.ReminderShare) {
+        viewModelScope.launch {
+            try {
+                sharingRepository.acceptShare(share)
+            } catch (exception: FriendException) {
+                _notice.value = exception.error
+            }
+        }
+    }
+
+    fun declineShare(shareId: String) {
+        viewModelScope.launch {
+            try {
+                sharingRepository.declineShare(shareId)
+            } catch (exception: FriendException) {
+                _notice.value = exception.error
+            }
+        }
+    }
 
     val messages: StateFlow<List<ChatMessage>> = chatRepository.observeMessages(otherUid)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -153,11 +188,14 @@ class ChatViewModel @Inject constructor(
 @Composable
 fun ChatScreen(
     onNavigateBack: () -> Unit,
+    onOpenTracking: () -> Unit,
     viewModel: ChatViewModel = hiltViewModel(),
 ) {
     val messages by viewModel.messages.collectAsStateWithLifecycle()
     val profile by viewModel.otherProfile.collectAsStateWithLifecycle()
     val conversation by viewModel.conversation.collectAsStateWithLifecycle()
+    val sharesById by viewModel.sharesById.collectAsStateWithLifecycle()
+    val isFamily by viewModel.isFamily.collectAsStateWithLifecycle()
     val notice by viewModel.notice.collectAsStateWithLifecycle()
     var input by rememberSaveable { mutableStateOf("") }
     val listState = rememberLazyListState()
@@ -186,8 +224,22 @@ fun ChatScreen(
                 .imePadding()
                 .fillMaxSize(),
         ) {
-            // Presence line under the title.
+            // Identity + presence line under the title.
             profile?.let { p ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(horizontal = MaterialTheme.spacing.large),
+                ) {
+                    FriendAvatar(profile = p, size = 24.dp)
+                    Text(
+                        text = stringResource(
+                            if (isFamily) R.string.family_state_member else R.string.friends_state_friends,
+                        ),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(start = MaterialTheme.spacing.small),
+                    )
+                }
                 Text(
                     text = when {
                         conversation?.otherTyping == true ->
@@ -241,7 +293,20 @@ fun ChatScreen(
                     val mine = message.senderUid != viewModel.otherUid
                     item(key = message.id) {
                         if (message.type == MessageType.SYSTEM) {
-                            SystemBubble(kind = message.systemKind, mine = mine)
+                            Column {
+                                SystemBubble(kind = message.systemKind, mine = mine)
+                                if (message.shareId != null) {
+                                    ReminderShareCard(
+                                        share = sharesById[message.shareId],
+                                        fallbackTitle = message.shareTitle,
+                                        fallbackSchedule = message.shareSchedule,
+                                        mine = mine,
+                                        onOpen = onOpenTracking,
+                                        onAccept = viewModel::acceptShare,
+                                        onDecline = viewModel::declineShare,
+                                    )
+                                }
+                            }
                         } else {
                             MessageBubble(
                                 message = message,
@@ -390,6 +455,178 @@ private fun MessageBubble(
     }
 }
 
+/**
+ * Vinted-style reminder card inside the conversation: live status from the
+ * share document, Accept/Decline for a pending recipient, Open → tracking.
+ * The card persists in history; only its status chip changes over time.
+ */
+@Composable
+private fun ReminderShareCard(
+    share: com.alertnotes.domain.model.ReminderShare?,
+    fallbackTitle: String,
+    fallbackSchedule: String,
+    mine: Boolean,
+    onOpen: () -> Unit,
+    onAccept: (com.alertnotes.domain.model.ReminderShare) -> Unit,
+    onDecline: (String) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start,
+    ) {
+        Surface(
+            shape = MaterialTheme.shapes.large,
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            modifier = Modifier.widthIn(max = 320.dp),
+        ) {
+            Row {
+                // Brand accent bar — the card reads as a reminder, not a bubble.
+                Box(
+                    modifier = Modifier
+                        .padding(0.dp)
+                        .size(width = 4.dp, height = 96.dp)
+                        .background(MaterialTheme.colorScheme.primary),
+                )
+                Column(modifier = Modifier.padding(MaterialTheme.spacing.medium)) {
+                    Text(
+                        text = share?.title?.ifBlank { fallbackTitle } ?: fallbackTitle,
+                        style = MaterialTheme.typography.titleSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    val schedule = share?.scheduleSummary?.ifBlank { fallbackSchedule }
+                        ?: fallbackSchedule
+                    if (schedule.isNotBlank()) {
+                        Text(
+                            text = schedule,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(top = MaterialTheme.spacing.extraSmall),
+                    ) {
+                        share?.let { com.alertnotes.features.sharing.StatusChip(status = it.status) }
+                        androidx.compose.material3.TextButton(onClick = onOpen) {
+                            Text(text = stringResource(R.string.chat_card_open))
+                        }
+                    }
+                    if (share != null &&
+                        share.status == com.alertnotes.domain.model.ShareStatus.PENDING &&
+                        !mine
+                    ) {
+                        Row {
+                            androidx.compose.material3.TextButton(onClick = { onAccept(share) }) {
+                                Text(text = stringResource(R.string.friends_accept))
+                            }
+                            androidx.compose.material3.TextButton(onClick = { onDecline(share.id) }) {
+                                Text(
+                                    text = stringResource(R.string.friends_reject),
+                                    color = MaterialTheme.colorScheme.error,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@HiltViewModel
+class MessagesViewModel @Inject constructor(
+    chatRepository: ChatRepository,
+) : ViewModel() {
+
+    private val _query = MutableStateFlow("")
+    val query: StateFlow<String> = _query.asStateFlow()
+
+    val conversations = chatRepository.conversations
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    fun onQueryChange(value: String) {
+        _query.value = value
+    }
+}
+
+/** The dedicated Messages destination: conversations, search, presence. */
+@Composable
+fun MessagesScreen(
+    onOpenChat: (String) -> Unit,
+    onOpenUser: (String) -> Unit,
+    onOpenFriends: () -> Unit,
+    viewModel: MessagesViewModel = hiltViewModel(),
+) {
+    val query by viewModel.query.collectAsStateWithLifecycle()
+    val conversations by viewModel.conversations.collectAsStateWithLifecycle()
+    val zone = ZoneId.systemDefault()
+    val visible = conversations.filter {
+        query.isBlank() || it.profile.displayName.contains(query, ignoreCase = true) ||
+            it.profile.username.contains(query, ignoreCase = true)
+    }
+
+    Scaffold(
+        topBar = { AppTopBar(title = stringResource(R.string.nav_messages)) },
+        containerColor = MaterialTheme.colorScheme.background,
+    ) { innerPadding ->
+        Box(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
+            LazyColumn(
+                modifier = Modifier
+                    .widthIn(max = 640.dp)
+                    .fillMaxSize()
+                    .align(Alignment.TopCenter),
+                contentPadding = PaddingValues(
+                    horizontal = MaterialTheme.spacing.large,
+                    vertical = MaterialTheme.spacing.small,
+                ),
+                verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.large),
+            ) {
+                item {
+                    SearchField(
+                        query = query,
+                        onQueryChange = viewModel::onQueryChange,
+                        placeholder = stringResource(R.string.inbox_search_hint),
+                    )
+                }
+                if (visible.isEmpty()) {
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = MaterialTheme.spacing.huge),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Text(
+                                text = stringResource(R.string.inbox_empty),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                            )
+                            androidx.compose.material3.TextButton(onClick = onOpenFriends) {
+                                Text(text = stringResource(R.string.messages_empty_action))
+                            }
+                        }
+                    }
+                } else {
+                    item {
+                        SectionCard(title = stringResource(R.string.inbox_conversations)) {
+                            visible.forEach { conversation ->
+                                ConversationRow(
+                                    conversation = conversation,
+                                    zone = zone,
+                                    onClick = { onOpenChat(conversation.otherUid) },
+                                    onOpenProfile = { onOpenUser(conversation.otherUid) },
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun SystemBubble(kind: SystemMessageKind, mine: Boolean) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
@@ -433,16 +670,9 @@ private fun DaySeparator(day: LocalDate) {
 
 @HiltViewModel
 class InboxViewModel @Inject constructor(
-    chatRepository: ChatRepository,
     friendRepository: FriendRepository,
     sharingRepository: com.alertnotes.domain.repository.ReminderSharingRepository,
 ) : ViewModel() {
-
-    private val _query = MutableStateFlow("")
-    val query: StateFlow<String> = _query.asStateFlow()
-
-    val conversations = chatRepository.conversations
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val friendRequests = friendRepository.incomingRequests
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -452,10 +682,6 @@ class InboxViewModel @Inject constructor(
 
     val reminderInvitations = sharingRepository.incomingShares
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-
-    fun onQueryChange(value: String) {
-        _query.value = value
-    }
 }
 
 /**
@@ -465,25 +691,17 @@ class InboxViewModel @Inject constructor(
  */
 @Composable
 fun InboxScreen(
-    onOpenUser: (String) -> Unit,
-    onOpenChat: (String) -> Unit,
     onOpenSharedReminders: () -> Unit,
     onOpenFriends: () -> Unit,
+    onOpenMessages: () -> Unit,
     viewModel: InboxViewModel = hiltViewModel(),
 ) {
-    val query by viewModel.query.collectAsStateWithLifecycle()
-    val conversations by viewModel.conversations.collectAsStateWithLifecycle()
     val friendRequests by viewModel.friendRequests.collectAsStateWithLifecycle()
     val familyInvitations by viewModel.familyInvitations.collectAsStateWithLifecycle()
     val reminderInvitations by viewModel.reminderInvitations.collectAsStateWithLifecycle()
-    val zone = ZoneId.systemDefault()
 
     val pendingShares = reminderInvitations
         .filter { it.share.status == com.alertnotes.domain.model.ShareStatus.PENDING }
-    val visibleConversations = conversations.filter {
-        query.isBlank() || it.profile.displayName.contains(query, ignoreCase = true) ||
-            it.profile.username.contains(query, ignoreCase = true)
-    }
 
     Scaffold(
         topBar = { AppTopBar(title = stringResource(R.string.inbox_title)) },
@@ -501,12 +719,27 @@ fun InboxScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.extraLarge),
             ) {
-                item {
-                    SearchField(
-                        query = query,
-                        onQueryChange = viewModel::onQueryChange,
-                        placeholder = stringResource(R.string.inbox_search_hint),
-                    )
+                if (friendRequests.isEmpty() && familyInvitations.isEmpty() &&
+                    pendingShares.isEmpty()
+                ) {
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = MaterialTheme.spacing.huge),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Text(
+                                text = stringResource(R.string.inbox_all_clear),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                            )
+                            androidx.compose.material3.TextButton(onClick = onOpenMessages) {
+                                Text(text = stringResource(R.string.nav_messages))
+                            }
+                        }
+                    }
                 }
                 if (friendRequests.isNotEmpty()) {
                     item {
@@ -544,27 +777,6 @@ fun InboxScreen(
                                 ),
                                 onClick = onOpenSharedReminders,
                             )
-                        }
-                    }
-                }
-                item {
-                    SectionCard(title = stringResource(R.string.inbox_conversations)) {
-                        if (visibleConversations.isEmpty()) {
-                            Text(
-                                text = stringResource(R.string.inbox_empty),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(MaterialTheme.spacing.large),
-                            )
-                        } else {
-                            visibleConversations.forEach { conversation ->
-                                ConversationRow(
-                                    conversation = conversation,
-                                    zone = zone,
-                                    onClick = { onOpenChat(conversation.otherUid) },
-                                    onOpenProfile = { onOpenUser(conversation.otherUid) },
-                                )
-                            }
                         }
                     }
                 }

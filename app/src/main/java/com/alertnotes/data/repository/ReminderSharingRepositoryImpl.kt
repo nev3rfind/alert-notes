@@ -67,9 +67,13 @@ class ReminderSharingRepositoryImpl @Inject constructor(
     private suspend fun narrate(
         otherUid: String,
         kind: com.alertnotes.domain.model.SystemMessageKind,
+        shareId: String? = null,
+        shareTitle: String = "",
+        shareSchedule: String = "",
     ) {
-        runCatching { chatRepository.postSystemMessage(otherUid, kind) }
-            .onFailure { logger.d(TAG, "Chat narration skipped: ${it.message}") }
+        runCatching {
+            chatRepository.postSystemMessage(otherUid, kind, shareId, shareTitle, shareSchedule)
+        }.onFailure { logger.d(TAG, "Chat narration skipped: ${it.message}") }
     }
 
     private val json = Json {
@@ -132,8 +136,14 @@ class ReminderSharingRepositoryImpl @Inject constructor(
                 ),
             ).await()
         }
-        recipientUids.forEach {
-            narrate(it, com.alertnotes.domain.model.SystemMessageKind.REMINDER_SHARED)
+        recipientUids.forEach { recipientUid ->
+            narrate(
+                recipientUid,
+                com.alertnotes.domain.model.SystemMessageKind.REMINDER_SHARED,
+                shareId = "${owner}_${reminder.id}_$recipientUid",
+                shareTitle = reminder.title,
+                shareSchedule = scheduleSummary,
+            )
         }
         logger.i(TAG, "Reminder shared with ${recipientUids.size} recipient(s)")
     }
@@ -154,7 +164,13 @@ class ReminderSharingRepositoryImpl @Inject constructor(
             SetOptions.merge(),
         ).await()
         deliverLocally(share)
-        narrate(share.ownerUid, com.alertnotes.domain.model.SystemMessageKind.REMINDER_ACCEPTED)
+        narrate(
+            share.ownerUid,
+            com.alertnotes.domain.model.SystemMessageKind.REMINDER_ACCEPTED,
+            shareId = share.id,
+            shareTitle = share.title,
+            shareSchedule = share.scheduleSummary,
+        )
     }
 
     override suspend fun declineShare(shareId: String) = runShareOp {

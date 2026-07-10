@@ -94,8 +94,14 @@ class ChatRepositoryImpl @Inject constructor(
         postMessage(otherUid, body, MessageType.TEXT, SystemMessageKind.NONE)
     }
 
-    override suspend fun postSystemMessage(otherUid: String, kind: SystemMessageKind) = runChatOp {
-        postMessage(otherUid, "", MessageType.SYSTEM, kind)
+    override suspend fun postSystemMessage(
+        otherUid: String,
+        kind: SystemMessageKind,
+        shareId: String?,
+        shareTitle: String,
+        shareSchedule: String,
+    ) = runChatOp {
+        postMessage(otherUid, "", MessageType.SYSTEM, kind, shareId, shareTitle, shareSchedule)
     }
 
     override suspend fun markRead(otherUid: String) = runChatOp {
@@ -143,6 +149,9 @@ class ChatRepositoryImpl @Inject constructor(
         text: String,
         type: MessageType,
         kind: SystemMessageKind,
+        shareId: String? = null,
+        shareTitle: String = "",
+        shareSchedule: String = "",
     ) {
         val me = requireUid()
         // No chatting with strangers: friendship or family is required.
@@ -161,6 +170,9 @@ class ChatRepositoryImpl @Inject constructor(
                     "systemKind" to kind.name,
                     "status" to MessageStatus.SENT.name,
                     "replyToId" to null,
+                    "shareId" to shareId,
+                    "shareTitle" to shareTitle,
+                    "shareSchedule" to shareSchedule,
                     "deletedFor" to emptyList<String>(),
                     "createdAt" to FieldValue.serverTimestamp(),
                 ),
@@ -229,6 +241,9 @@ class ChatRepositoryImpl @Inject constructor(
         status = MessageStatus.entries.firstOrNull { it.name == getString("status") }
             ?: MessageStatus.SENT,
         replyToId = getString("replyToId"),
+        shareId = getString("shareId"),
+        shareTitle = getString("shareTitle").orEmpty(),
+        shareSchedule = getString("shareSchedule").orEmpty(),
         createdAt = instantField("createdAt"),
     )
 

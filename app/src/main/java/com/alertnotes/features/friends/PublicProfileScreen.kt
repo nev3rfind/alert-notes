@@ -91,7 +91,7 @@ class PublicProfileViewModel @Inject constructor(
     private val authRepository: AuthRepository,
 ) : ViewModel() {
 
-    private val uid: String = savedStateHandle.toRoute<PublicProfileRoute>().uid
+    val uid: String = savedStateHandle.toRoute<PublicProfileRoute>().uid
 
     private val retry = MutableStateFlow(0)
 
@@ -201,6 +201,7 @@ class PublicProfileViewModel @Inject constructor(
 @Composable
 fun PublicProfileScreen(
     onNavigateBack: () -> Unit,
+    onOpenChat: (String) -> Unit,
     viewModel: PublicProfileViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -265,6 +266,15 @@ fun PublicProfileScreen(
                         accent = state.profile.bannerTheme.colors().accent,
                         modifier = Modifier.padding(top = MaterialTheme.spacing.extraLarge),
                     )
+                    if (friendState == FriendshipState.FRIENDS || familyState == FamilyState.FAMILY) {
+                        PrimaryButton(
+                            text = stringResource(R.string.friends_message),
+                            onClick = { onOpenChat(viewModel.uid) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = MaterialTheme.spacing.extraLarge),
+                        )
+                    }
                     RelationshipActions(
                         friendState = friendState,
                         familyState = familyState,
