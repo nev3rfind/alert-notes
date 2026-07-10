@@ -50,6 +50,8 @@ enum class FriendError {
     /** Family invitations require an existing friendship. */
     NOT_FRIENDS,
     ALREADY_FAMILY,
+    /** Firestore rejected the operation — security rules are out of date. */
+    PERMISSION,
     NETWORK,
     UNKNOWN,
 }

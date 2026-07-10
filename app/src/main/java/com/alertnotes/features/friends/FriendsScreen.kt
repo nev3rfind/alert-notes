@@ -1,6 +1,7 @@
 package com.alertnotes.features.friends
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,8 +16,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Block
+import androidx.compose.material.icons.outlined.FamilyRestroom
 import androidx.compose.material.icons.outlined.PersonSearch
-import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -123,6 +124,9 @@ class FriendsViewModel @Inject constructor(
 
     fun removeFriend(uid: String) = act { friendRepository.removeFriend(uid) }
 
+    /** Family always begins as a friend; the repository enforces it too. */
+    fun inviteToFamily(uid: String) = act { friendRepository.inviteToFamily(uid, "") }
+
     fun acceptFamily(id: String) = act { friendRepository.acceptFamilyInvitation(id) }
 
     fun declineFamily(id: String) = act { friendRepository.declineFamilyInvitation(id) }
@@ -161,6 +165,7 @@ class FriendsViewModel @Inject constructor(
 @Composable
 fun FriendsScreen(
     onOpenUser: (String) -> Unit,
+    onOpenFamily: () -> Unit,
     viewModel: FriendsViewModel = hiltViewModel(),
 ) {
     val query by viewModel.query.collectAsStateWithLifecycle()
@@ -292,11 +297,22 @@ fun FriendsScreen(
                             EmptyHint(text = stringResource(R.string.friends_list_empty))
                         } else {
                             friends.forEach { friend ->
+                                val isFamily = family.any { it.uid == friend.uid }
                                 PersonRow(
                                     profile = friend.profile,
                                     showLastSeen = true,
+                                    badge = if (isFamily) {
+                                        stringResource(R.string.family_state_member)
+                                    } else {
+                                        null
+                                    },
                                     onClick = { onOpenUser(friend.uid) },
                                 ) {
+                                    if (!isFamily) {
+                                        TextButton(onClick = { viewModel.inviteToFamily(friend.uid) }) {
+                                            Text(text = stringResource(R.string.family_invite_short))
+                                        }
+                                    }
                                     TextButton(onClick = { viewModel.removeFriend(friend.uid) }) {
                                         Text(
                                             text = stringResource(R.string.friends_remove),
@@ -308,72 +324,22 @@ fun FriendsScreen(
                         }
                     }
                 }
-                if (incomingFamily.isNotEmpty()) {
-                    item {
-                        SectionCard(title = stringResource(R.string.family_section_incoming)) {
-                            incomingFamily.forEach { item ->
-                                PersonRow(
-                                    profile = item.profile,
-                                    supportingOverride = item.invitation.message.ifBlank {
-                                        stringResource(R.string.family_invite_default)
-                                    },
-                                    onClick = { onOpenUser(item.invitation.fromUid) },
-                                ) {
-                                    TextButton(onClick = { viewModel.acceptFamily(item.invitation.id) }) {
-                                        Text(text = stringResource(R.string.family_accept))
-                                    }
-                                    TextButton(onClick = { viewModel.declineFamily(item.invitation.id) }) {
-                                        Text(
-                                            text = stringResource(R.string.family_decline),
-                                            color = MaterialTheme.colorScheme.error,
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                if (outgoingFamily.isNotEmpty()) {
-                    item {
-                        SectionCard(title = stringResource(R.string.family_section_outgoing)) {
-                            outgoingFamily.forEach { item ->
-                                PersonRow(
-                                    profile = item.profile,
-                                    supportingOverride = stringResource(R.string.family_state_invite_sent),
-                                    onClick = { onOpenUser(item.invitation.toUid) },
-                                ) {
-                                    TextButton(onClick = { viewModel.cancelFamily(item.invitation.id) }) {
-                                        Text(text = stringResource(R.string.family_cancel_invitation))
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
                 item {
+                    // Family lives in its own centre; badge count keeps
+                    // pending invitations visible from here.
                     SectionCard(title = stringResource(R.string.family_section_my)) {
-                        if (family.isEmpty()) {
-                            EmptyHint(text = stringResource(R.string.family_list_empty))
-                        } else {
-                            family.forEach { member ->
-                                FamilyMemberRow(
-                                    member = member,
-                                    onOpen = { onOpenUser(member.uid) },
-                                    onRemove = { viewModel.removeFamily(member.uid) },
-                                    onPermissions = { permissions ->
-                                        viewModel.setFamilyPermissions(member.uid, permissions)
-                                    },
-                                )
-                            }
-                        }
-                    }
-                }
-                item {
-                    SectionCard(title = stringResource(R.string.family_section_settings)) {
                         AppListItem(
-                            title = stringResource(R.string.family_settings_privacy),
-                            supportingText = stringResource(R.string.profile_coming_soon),
-                            leadingIcon = Icons.Outlined.Shield,
+                            title = stringResource(R.string.family_centre_row),
+                            supportingText = if (incomingFamily.isEmpty()) {
+                                stringResource(R.string.family_centre_row_subtitle)
+                            } else {
+                                stringResource(
+                                    R.string.family_centre_row_pending,
+                                    incomingFamily.size,
+                                )
+                            },
+                            leadingIcon = Icons.Outlined.FamilyRestroom,
+                            onClick = onOpenFamily,
                         )
                     }
                 }
@@ -420,6 +386,8 @@ internal fun PersonRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            // The whole card opens the profile; trailing buttons act on top.
+            .clickable(onClick = onClick)
             .padding(vertical = MaterialTheme.spacing.small),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -499,7 +467,7 @@ private fun RelationshipBadge(text: String, modifier: Modifier = Modifier) {
  * presence visibility.
  */
 @Composable
-private fun FamilyMemberRow(
+internal fun FamilyMemberRow(
     member: FamilyMember,
     onOpen: () -> Unit,
     onRemove: () -> Unit,
@@ -607,7 +575,7 @@ internal fun FriendAvatar(profile: PublicProfile, size: androidx.compose.ui.unit
 }
 
 @Composable
-private fun EmptyHint(text: String) {
+internal fun EmptyHint(text: String) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.padding(vertical = MaterialTheme.spacing.medium),
@@ -646,6 +614,7 @@ internal fun FriendNoticeDialog(error: FriendError, onDismiss: () -> Unit) {
                         FriendError.ALREADY_PENDING -> R.string.friends_error_pending
                         FriendError.NOT_FRIENDS -> R.string.friends_error_not_friends
                         FriendError.ALREADY_FAMILY -> R.string.friends_error_already_family
+                        FriendError.PERMISSION -> R.string.friends_error_permission
                         FriendError.NETWORK -> R.string.auth_error_network
                         FriendError.UNKNOWN -> R.string.auth_error_unknown
                     },

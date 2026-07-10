@@ -737,6 +737,12 @@
     <string name="family_perm_start_chat">Can start a chat</string>
     <string name="friends_error_not_friends">You can only invite friends to your family. Send a friend request first.</string>
     <string name="friends_error_already_family">You\'re already family.</string>
+    <string name="friends_error_permission">The server rejected this action. The Firestore security rules in the Firebase console need to be updated to the latest version.</string>
+    <string name="family_centre_title">Family</string>
+    <string name="family_centre_row">Family Centre</string>
+    <string name="family_centre_row_subtitle">Members, invitations, and permissions</string>
+    <string name="family_centre_row_pending">%1$d pending invitation(s)</string>
+    <string name="family_invite_short">Family</string>
 
     <!-- Reminder reliability -->
     <string name="settings_reliability_row">Reminder reliability</string>

@@ -591,6 +591,12 @@ class FriendRepositoryImpl @Inject constructor(
                     exception.code == FirebaseFirestoreException.Code.UNAVAILABLE ->
                     FriendError.NETWORK
 
+                // Never bury a rules mismatch in "something went wrong" —
+                // it's a configuration problem the user can actually fix.
+                exception is FirebaseFirestoreException &&
+                    exception.code == FirebaseFirestoreException.Code.PERMISSION_DENIED ->
+                    FriendError.PERMISSION
+
                 else -> FriendError.UNKNOWN
             },
             exception,

@@ -21,6 +21,9 @@ data object ProfileRoute
 @Serializable
 data object FriendsRoute
 
+@Serializable
+data object FamilyRoute
+
 /** Another user's public profile. */
 @Serializable
 data class PublicProfileRoute(val uid: String)
