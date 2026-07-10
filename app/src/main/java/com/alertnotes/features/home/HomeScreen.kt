@@ -18,17 +18,23 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.Diversity3
 import androidx.compose.material.icons.outlined.FolderZip
 import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.NotificationsNone
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -61,6 +67,8 @@ import com.alertnotes.domain.model.Reminder
 import com.alertnotes.domain.model.UserPreferences
 import com.alertnotes.features.account.ConnectionStatusCard
 import com.alertnotes.features.alerts.AlertIconBadge
+import com.alertnotes.features.friends.FriendAvatar
+import com.alertnotes.features.sharing.StatusChip
 import com.alertnotes.features.alerts.alertAccentColor
 import com.alertnotes.features.alerts.staticBrush
 import com.alertnotes.features.reminders.editor.labelRes
@@ -83,9 +91,16 @@ fun HomeScreen(
     onOpenSettings: () -> Unit,
     onOpenBackup: () -> Unit,
     onOpenFriends: () -> Unit,
+    onOpenSharedReminders: () -> Unit,
+    onOpenInbox: () -> Unit,
+    onOpenMessages: () -> Unit,
+    onOpenNotifications: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val sharingPulse by viewModel.sharingPulse.collectAsStateWithLifecycle()
+    val sharedByMe by viewModel.sharedByMe.collectAsStateWithLifecycle()
+    val sharedWithMe by viewModel.sharedWithMe.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = { AppTopBar(title = stringResource(R.string.app_name)) },
@@ -117,6 +132,34 @@ fun HomeScreen(
                         modifier = Modifier.fillMaxWidth(),
                         onClick = onOpenSettings,
                     )
+                }
+                if (!sharingPulse.isEmpty) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        SharingPulseRow(
+                            pulse = sharingPulse,
+                            onOpenInbox = onOpenInbox,
+                            onOpenMessages = onOpenMessages,
+                            onOpenNotifications = onOpenNotifications,
+                        )
+                    }
+                }
+                if (sharedByMe.isNotEmpty()) {
+                    item {
+                        SharedRemindersCard(
+                            titleRes = R.string.home_shared_by_me,
+                            shares = sharedByMe,
+                            onOpen = onOpenSharedReminders,
+                        )
+                    }
+                }
+                if (sharedWithMe.isNotEmpty()) {
+                    item {
+                        SharedRemindersCard(
+                            titleRes = R.string.home_shared_with_me,
+                            shares = sharedWithMe,
+                            onOpen = onOpenSharedReminders,
+                        )
+                    }
                 }
                 uiState.pausedUntil?.let { pausedUntil ->
                     item(span = { GridItemSpan(maxLineSpan) }) {
@@ -179,6 +222,159 @@ fun HomeScreen(
         }
     }
 }
+
+// region Sharing dashboard cards
+
+/**
+ * One glance at everything social: pending invitations, unread messages,
+ * unread notifications — each tile a shortcut to its surface. Hidden
+ * entirely when all counters are zero (and always in offline mode).
+ */
+@Composable
+private fun SharingPulseRow(
+    pulse: SharingPulse,
+    onOpenInbox: () -> Unit,
+    onOpenMessages: () -> Unit,
+    onOpenNotifications: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.medium),
+    ) {
+        PulseTile(
+            count = pulse.pendingInvitations,
+            labelRes = R.string.home_pulse_invitations,
+            icon = Icons.Outlined.Inbox,
+            onClick = onOpenInbox,
+            modifier = Modifier.weight(1f),
+        )
+        PulseTile(
+            count = pulse.unreadMessages,
+            labelRes = R.string.home_pulse_messages,
+            icon = Icons.Outlined.ChatBubbleOutline,
+            onClick = onOpenMessages,
+            modifier = Modifier.weight(1f),
+        )
+        PulseTile(
+            count = pulse.unreadNotifications,
+            labelRes = R.string.home_pulse_notifications,
+            icon = Icons.Outlined.NotificationsNone,
+            onClick = onOpenNotifications,
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+@Composable
+private fun PulseTile(
+    count: Int,
+    labelRes: Int,
+    icon: ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val active = count > 0
+    Surface(
+        onClick = onClick,
+        shape = MaterialTheme.shapes.large,
+        color = if (active) {
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerLow
+        },
+        modifier = modifier,
+    ) {
+        Column(
+            modifier = Modifier.padding(MaterialTheme.spacing.large),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (active) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
+            Text(
+                text = count.toString(),
+                style = MaterialTheme.typography.titleLarge,
+                color = if (active) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                },
+            )
+            Text(
+                text = stringResource(labelRes),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+/** Live shared reminders (sent or received) with avatars and status. */
+@Composable
+private fun SharedRemindersCard(
+    titleRes: Int,
+    shares: List<com.alertnotes.domain.model.ReminderShareWithProfile>,
+    onOpen: () -> Unit,
+) {
+    SectionCard(title = stringResource(titleRes)) {
+        shares.forEach { item ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onOpen)
+                    .padding(
+                        horizontal = MaterialTheme.spacing.large,
+                        vertical = MaterialTheme.spacing.small,
+                    ),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                FriendAvatar(profile = item.profile, size = 32.dp)
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = MaterialTheme.spacing.medium),
+                ) {
+                    Text(
+                        text = item.share.title,
+                        style = MaterialTheme.typography.titleSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = listOf(item.profile.displayName, item.share.scheduleSummary)
+                            .filter { it.isNotBlank() }
+                            .joinToString(" · "),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                StatusChip(status = item.share.status)
+            }
+        }
+        SecondaryButton(
+            text = stringResource(R.string.home_shared_open_all),
+            onClick = onOpen,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(
+                    horizontal = MaterialTheme.spacing.large,
+                    vertical = MaterialTheme.spacing.small,
+                ),
+        )
+    }
+}
+
+// endregion
 
 // region Header & hero cards
 

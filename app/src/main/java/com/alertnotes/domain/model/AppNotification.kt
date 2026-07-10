@@ -16,6 +16,7 @@ enum class NotificationCategory {
     REMINDER_CANCELLED,
     REMINDER_UPDATED,
     REMINDER_TRIGGERED,
+    REMINDER_ACKNOWLEDGED,
     CHAT_MESSAGE,
     SYSTEM,
 }

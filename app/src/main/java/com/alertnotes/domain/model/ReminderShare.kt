@@ -86,6 +86,13 @@ data class ReminderShare(
     val recipientReminderId: Long?,
     /** Most recent recipient-side fire mirrored back for owner tracking. */
     val lastFiredAt: Instant?,
+    /** How the recipient acknowledged the latest fire (null = not yet). */
+    val ackMethod: AcknowledgeMethod? = null,
+    val ackAt: Instant? = null,
+    /** Seconds between the alert firing and the acknowledgement. */
+    val ackDelaySeconds: Long? = null,
+    /** Signature vector JSON when the acknowledgement was a signature. */
+    val ackSignature: String = "",
     val createdAt: Instant?,
     val respondedAt: Instant?,
     val scheduledAt: Instant?,

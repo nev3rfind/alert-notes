@@ -43,6 +43,7 @@ class ShareDeliveryObserver @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val sharingRepository: ReminderSharingRepository,
     private val reminderRepository: ReminderRepository,
+    private val historyRepository: com.alertnotes.domain.repository.ReminderHistoryRepository,
     private val logger: AppLogger,
 ) {
 
@@ -58,7 +59,11 @@ class ShareDeliveryObserver @Inject constructor(
                 isOnline,
                 sharingRepository.incomingShares,
                 reminderRepository.observeReminders(),
-            ) { online, incoming, _ -> online && incoming.isNotEmpty() }
+                // Acknowledgements land in the history archive, not the
+                // reminders table — without this signal a dismissal would
+                // wait for the next unrelated sweep to reach the owner.
+                historyRepository.observeLatest(),
+            ) { online, incoming, _, _ -> online && incoming.isNotEmpty() }
                 .debounce(SWEEP_DEBOUNCE_MILLIS)
                 .collectLatest { actionable ->
                     if (actionable) {

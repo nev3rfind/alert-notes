@@ -1,5 +1,6 @@
 package com.alertnotes.features.sharing
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -30,11 +31,18 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.alertnotes.data.entities.toReminderDrawingOrNull
+import com.alertnotes.features.drawing.drawReminderStrokes
+import com.alertnotes.features.history.labelRes
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -722,6 +730,24 @@ private fun OutgoingShareCard(
                 },
             ),
         )
+        share.ackAt?.let { ackAt ->
+            ReviewLine(
+                label = stringResource(R.string.sharing_ack_label),
+                value = listOfNotNull(
+                    share.ackMethod?.let { stringResource(it.labelRes()) },
+                    ackAt.toDisplayDateTime(ZoneId.systemDefault()),
+                ).joinToString(" · "),
+            )
+            share.ackDelaySeconds?.let { delay ->
+                ReviewLine(
+                    label = stringResource(R.string.sharing_ack_delay),
+                    value = formatResponseDelay(delay),
+                )
+            }
+            share.ackSignature.toReminderDrawingOrNull()?.let { signature ->
+                SignaturePreview(signature = signature)
+            }
+        }
         if (share.updateRequested && share.hasPendingUpdate) {
             Text(
                 text = stringResource(R.string.sharing_update_pending_owner),
@@ -742,9 +768,21 @@ private fun OutgoingShareCard(
                         " " + it.toDisplayDateTime(ZoneId.systemDefault()),
                 )
             }
+            share.scheduledAt?.let {
+                add(
+                    stringResource(R.string.sharing_time_scheduled) +
+                        " " + it.toDisplayDateTime(ZoneId.systemDefault()),
+                )
+            }
             share.lastFiredAt?.let {
                 add(
                     stringResource(R.string.sharing_time_fired) +
+                        " " + it.toDisplayDateTime(ZoneId.systemDefault()),
+                )
+            }
+            share.ackAt?.let {
+                add(
+                    stringResource(R.string.sharing_ack_label) +
                         " " + it.toDisplayDateTime(ZoneId.systemDefault()),
                 )
             }
@@ -779,6 +817,32 @@ private fun OutgoingShareCard(
         }
     }
 }
+
+/** The recipient's signature, re-rendered from its vector — proof inline. */
+@Composable
+private fun SignaturePreview(signature: com.alertnotes.domain.model.ReminderDrawing) {
+    val description = stringResource(R.string.sharing_ack_signature_cd)
+    androidx.compose.foundation.Canvas(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = MaterialTheme.spacing.extraSmall)
+            .aspectRatio(SIGNATURE_PREVIEW_ASPECT)
+            .clip(MaterialTheme.shapes.small)
+            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+            .semantics { contentDescription = description },
+    ) {
+        drawReminderStrokes(signature.strokes)
+    }
+}
+
+/** Human response delay: seconds under a minute, then minutes, then hours. */
+private fun formatResponseDelay(seconds: Long): String = when {
+    seconds < 60 -> "${seconds}s"
+    seconds < 3_600 -> "${seconds / 60} min"
+    else -> "${seconds / 3_600}h ${(seconds % 3_600) / 60} min"
+}
+
+private const val SIGNATURE_PREVIEW_ASPECT = 3f
 
 // region shared pieces
 

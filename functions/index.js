@@ -186,4 +186,17 @@ exports.onReminderShare = onDocumentWritten("reminderShares/{shareId}", async (e
       deepLink: "shared",
     });
   }
+
+  // Acknowledgement mirrored by the recipient device → tell the owner.
+  const ackAdvanced = (after.ackAtMillis ?? 0) > (before.ackAtMillis ?? 0);
+  if (ackAdvanced) {
+    await sendToUser(after.ownerUid, {
+      type: "sharing",
+      tag: `share_${shareId}_ack`,
+      title: "Reminder acknowledged",
+      body: `“${title}” — ${await displayNameOf(after.recipientUid)}`,
+      senderUid: after.recipientUid,
+      deepLink: "shared",
+    });
+  }
 });

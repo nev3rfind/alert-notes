@@ -32,6 +32,14 @@ class ReminderHistoryRepositoryImpl @Inject constructor(
             .map { entities -> entities.map { it.toDomain() } }
             .flowOn(Dispatchers.Default)
 
+    override suspend fun latestResolved(reminderId: Long): HistoryEntry? =
+        historyDao.latestResolved(reminderId)?.toDomain()
+
+    override fun observeLatest(): Flow<HistoryEntry?> =
+        historyDao.observeRecent(1)
+            .map { entities -> entities.firstOrNull()?.toDomain() }
+            .flowOn(Dispatchers.Default)
+
     override suspend fun recordTriggered(reminder: Reminder, at: Instant) {
         if (!reminder.historyEnabled) return
         historyDao.insert(

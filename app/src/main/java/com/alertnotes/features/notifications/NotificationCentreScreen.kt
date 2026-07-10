@@ -147,6 +147,7 @@ private val REMINDER_CATEGORIES = setOf(
     NotificationCategory.REMINDER_CANCELLED,
     NotificationCategory.REMINDER_UPDATED,
     NotificationCategory.REMINDER_TRIGGERED,
+    NotificationCategory.REMINDER_ACKNOWLEDGED,
 )
 
 /**

@@ -8,6 +8,7 @@ import com.alertnotes.data.backup.toBackup
 import com.alertnotes.data.backup.toEntity
 import com.alertnotes.data.entities.toDomain
 import com.alertnotes.data.entities.toEntity
+import com.alertnotes.data.entities.toJson
 import com.alertnotes.data.remote.FirestoreSchema
 import com.alertnotes.domain.model.FriendError
 import com.alertnotes.domain.model.FriendException
@@ -71,6 +72,7 @@ class ReminderSharingRepositoryImpl @Inject constructor(
     authRepository: AuthRepository,
     private val friendRepository: FriendRepository,
     private val reminderRepository: ReminderRepository,
+    private val historyRepository: com.alertnotes.domain.repository.ReminderHistoryRepository,
     private val coordinator: ReminderSchedulingCoordinator,
     private val calculator: NextTriggerCalculator,
     private val timeProvider: TimeProvider,
@@ -373,8 +375,44 @@ class ReminderSharingRepositoryImpl @Inject constructor(
                     applyContentUpdate(share)
                 }
                 mirrorFireStatus(share, local)
+                mirrorAcknowledgement(share)
             }
         }
+    }
+
+    /**
+     * Mirrors the recipient's latest acknowledgement (method, time, response
+     * delay, signature vector) back to the owner. The local history archive
+     * is the source of truth; snoozes are postponements, not answers.
+     */
+    private suspend fun mirrorAcknowledgement(share: ReminderShare) {
+        val localId = share.recipientReminderId ?: return
+        val entry = historyRepository.latestResolved(localId) ?: return
+        val dismissedAt = entry.dismissedAt ?: return
+        val method = entry.method ?: return
+        if (method == com.alertnotes.domain.model.AcknowledgeMethod.SNOOZE) return
+        if (dismissedAt.toEpochMilli() <= (share.ackAt?.toEpochMilli() ?: 0L)) return
+        val delaySeconds = java.time.Duration.between(entry.triggeredAt, dismissedAt)
+            .seconds.coerceAtLeast(0)
+        shareReference(share.id).set(
+            mapOf(
+                "ackMethod" to method.name,
+                "ackAtMillis" to dismissedAt.toEpochMilli(),
+                "ackDelaySeconds" to delaySeconds,
+                "ackSignature" to (entry.signature?.toJson().orEmpty()),
+                "lastSyncAt" to FieldValue.serverTimestamp(),
+            ),
+            SetOptions.merge(),
+        ).await()
+        notificationCentre.publish(
+            recipientUid = share.ownerUid,
+            category = com.alertnotes.domain.model.NotificationCategory.REMINDER_ACKNOWLEDGED,
+            title = "Reminder acknowledged",
+            body = "${identity.displayName()} acknowledged “${share.title}”",
+            refId = share.id,
+            dedupeKey = "share_${share.id}_ack",
+        )
+        logger.i(TAG, "Acknowledgement mirrored for ${share.id} (${method.name})")
     }
 
     /** Mirrors the recipient-side fire/completion state back to the owner. */
@@ -594,6 +632,11 @@ class ReminderSharingRepositoryImpl @Inject constructor(
             contentUpdatedAt = getLong("contentUpdatedAt") ?: 0L,
             recipientReminderId = getLong("recipientReminderId"),
             lastFiredAt = getLong("lastFiredAtMillis")?.let(Instant::ofEpochMilli),
+            ackMethod = com.alertnotes.domain.model.AcknowledgeMethod.entries
+                .firstOrNull { it.name == getString("ackMethod") },
+            ackAt = getLong("ackAtMillis")?.let(Instant::ofEpochMilli),
+            ackDelaySeconds = getLong("ackDelaySeconds"),
+            ackSignature = getString("ackSignature").orEmpty(),
             createdAt = instantField("createdAt"),
             respondedAt = instantField("respondedAt"),
             scheduledAt = instantField("scheduledAt"),

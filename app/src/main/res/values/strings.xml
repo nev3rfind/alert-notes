@@ -27,6 +27,14 @@
     <string name="nav_exit">Exit</string>
     <string name="nav_more">More</string>
 
+    <!-- Home dashboard sharing cards -->
+    <string name="home_pulse_invitations">Invitations</string>
+    <string name="home_pulse_messages">Messages</string>
+    <string name="home_pulse_notifications">Alerts</string>
+    <string name="home_shared_by_me">Shared by me</string>
+    <string name="home_shared_with_me">Shared with me</string>
+    <string name="home_shared_open_all">Open tracking</string>
+
     <!-- Notification Centre + push channels + presence -->
     <string name="notifications_title">Notifications</string>
     <string name="notifications_row_subtitle">Every request, invitation, and update in one place</string>
@@ -84,6 +92,10 @@
     <string name="sharing_delete_confirm_title">Delete assigned reminder?</string>
     <string name="sharing_delete_confirm_message">This cancels it for every recipient and deletes your master copy. This can\'t be undone.</string>
     <string name="sharing_time_fired">Fired</string>
+    <string name="sharing_time_scheduled">Scheduled</string>
+    <string name="sharing_ack_label">Acknowledged</string>
+    <string name="sharing_ack_delay">Response time</string>
+    <string name="sharing_ack_signature_cd">Recipient\'s acknowledgement signature</string>
     <string name="chat_system_assigned_mine">You assigned a reminder</string>
     <string name="chat_system_assigned_theirs">This reminder was assigned to you</string>
 

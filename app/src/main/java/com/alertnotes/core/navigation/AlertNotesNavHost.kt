@@ -71,6 +71,10 @@ fun AlertNotesNavHost(
                 onOpenSettings = { navController.navigate(SettingsRoute) },
                 onOpenBackup = { navController.navigate(BackupRoute) },
                 onOpenFriends = { navController.navigateToTopLevel(FriendsRoute) },
+                onOpenSharedReminders = { navController.navigate(SharedRemindersRoute) },
+                onOpenInbox = { navController.navigate(InboxRoute) },
+                onOpenMessages = { navController.navigateToTopLevel(MessagesRoute) },
+                onOpenNotifications = { navController.navigate(NotificationCentreRoute) },
             )
         }
         composable<CalendarRoute> {
