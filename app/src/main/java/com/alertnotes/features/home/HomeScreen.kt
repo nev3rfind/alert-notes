@@ -20,10 +20,12 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.Diversity3
 import androidx.compose.material.icons.outlined.FolderZip
+import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Notifications
-import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -57,7 +59,7 @@ import com.alertnotes.core.ui.components.SectionCard
 import com.alertnotes.core.ui.theme.spacing
 import com.alertnotes.domain.model.Reminder
 import com.alertnotes.domain.model.UserPreferences
-import com.alertnotes.features.account.ModeStatusBadge
+import com.alertnotes.features.account.ConnectionStatusCard
 import com.alertnotes.features.alerts.AlertIconBadge
 import com.alertnotes.features.alerts.alertAccentColor
 import com.alertnotes.features.alerts.staticBrush
@@ -80,6 +82,7 @@ fun HomeScreen(
     onCreateReminder: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenBackup: () -> Unit,
+    onOpenFriends: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -107,7 +110,13 @@ fun HomeScreen(
                 verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.extraLarge),
             ) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
-                    DashboardHeader(onOpenSettings = onOpenSettings)
+                    DashboardHeader()
+                }
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    ConnectionStatusCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = onOpenSettings,
+                    )
                 }
                 uiState.pausedUntil?.let { pausedUntil ->
                     item(span = { GridItemSpan(maxLineSpan) }) {
@@ -158,8 +167,9 @@ fun HomeScreen(
                 item {
                     QuickActionsCard(
                         onCreateReminder = onCreateReminder,
+                        onOpenFriends = onOpenFriends,
+                        onOpenCalendar = onOpenCalendar,
                         onOpenBackup = onOpenBackup,
-                        onOpenSettings = onOpenSettings,
                     )
                 }
                 item {
@@ -173,7 +183,7 @@ fun HomeScreen(
 // region Header & hero cards
 
 @Composable
-private fun DashboardHeader(onOpenSettings: () -> Unit) {
+private fun DashboardHeader() {
     val greetingRes = remember { greetingForHour(LocalTime.now().hour) }
     val today = remember {
         LocalDate.now().format(
@@ -195,12 +205,6 @@ private fun DashboardHeader(onOpenSettings: () -> Unit) {
                 text = today,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            // Tapping the badge jumps to Settings, where the account and
-            // application mode are managed.
-            ModeStatusBadge(
-                modifier = Modifier.padding(top = MaterialTheme.spacing.small),
-                onClick = onOpenSettings,
             )
         }
         // Live clock: a leaf composable — only this text ticks each second.
@@ -627,8 +631,9 @@ private fun StatTile(value: Int, label: String) {
 @Composable
 private fun QuickActionsCard(
     onCreateReminder: () -> Unit,
+    onOpenFriends: () -> Unit,
+    onOpenCalendar: () -> Unit,
     onOpenBackup: () -> Unit,
-    onOpenSettings: () -> Unit,
 ) {
     SectionCard(
         title = stringResource(R.string.home_quick_actions_title),
@@ -641,15 +646,27 @@ private fun QuickActionsCard(
         )
         CardDivider()
         QuickActionRow(
-            icon = Icons.Outlined.FolderZip,
-            text = stringResource(R.string.home_action_backup),
-            onClick = onOpenBackup,
+            icon = Icons.Outlined.Group,
+            text = stringResource(R.string.home_action_find_friends),
+            onClick = onOpenFriends,
         )
         CardDivider()
         QuickActionRow(
-            icon = Icons.Outlined.Settings,
-            text = stringResource(R.string.home_action_settings),
-            onClick = onOpenSettings,
+            icon = Icons.Outlined.Diversity3,
+            text = stringResource(R.string.home_action_invite_family),
+            onClick = onOpenFriends,
+        )
+        CardDivider()
+        QuickActionRow(
+            icon = Icons.Outlined.CalendarMonth,
+            text = stringResource(R.string.home_calendar_preview),
+            onClick = onOpenCalendar,
+        )
+        CardDivider()
+        QuickActionRow(
+            icon = Icons.Outlined.FolderZip,
+            text = stringResource(R.string.home_action_backup),
+            onClick = onOpenBackup,
         )
     }
 }

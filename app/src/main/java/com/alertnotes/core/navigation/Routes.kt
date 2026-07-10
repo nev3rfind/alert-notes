@@ -29,6 +29,9 @@ data object FamilyRoute
 data class PublicProfileRoute(val uid: String)
 
 @Serializable
+data object MoreRoute
+
+@Serializable
 data object SettingsRoute
 
 @Serializable

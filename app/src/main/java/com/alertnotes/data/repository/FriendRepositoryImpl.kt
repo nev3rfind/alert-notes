@@ -579,11 +579,14 @@ class FriendRepositoryImpl @Inject constructor(
     private fun requireUid(): String =
         auth.currentUser?.uid ?: throw FriendException(FriendError.UNKNOWN)
 
-    private inline fun <T> runFriendOp(block: () -> T): T = try {
+    private suspend fun <T> runFriendOp(block: suspend () -> T): T = try {
         block()
     } catch (exception: FriendException) {
         throw exception
     } catch (exception: Exception) {
+        // Diagnostic: the exact Firestore failure (code + path) so a rules
+        // mismatch names itself in Logcat instead of hiding behind a dialog.
+        logger.e(TAG, "Friend op failed: ${exception::class.simpleName}: ${exception.message}", exception)
         throw FriendException(
             when {
                 exception is IOException -> FriendError.NETWORK

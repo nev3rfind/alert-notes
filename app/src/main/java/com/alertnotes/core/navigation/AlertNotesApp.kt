@@ -57,7 +57,7 @@ fun AlertNotesApp(createReminderRequestId: Int = 0) {
     }
     val useNavigationRail = windowWidthClass != WindowWidthClass.Compact
     // Exit closes only the UI — AlarmManager schedules and reminder data are
-    // untouched, exactly like the Settings exit row.
+    // untouched. It lives in the More menu now, not on the bar itself.
     val exitActivity = LocalActivity.current
     val onExit: () -> Unit = { exitActivity?.finishAndRemoveTask() }
 
@@ -67,7 +67,6 @@ fun AlertNotesApp(createReminderRequestId: Int = 0) {
                 destinations = TopLevelDestination.entries,
                 isSelected = { currentDestination.isDestinationSelected(it) },
                 onNavigate = { navController.navigateToTopLevel(it.route) },
-                onExit = onExit,
             )
         }
         Scaffold(
@@ -83,7 +82,6 @@ fun AlertNotesApp(createReminderRequestId: Int = 0) {
                             destinations = TopLevelDestination.entries,
                             isSelected = { currentDestination.isDestinationSelected(it) },
                             onNavigate = { navController.navigateToTopLevel(it.route) },
-                            onExit = onExit,
                         )
                     }
                 }
@@ -91,6 +89,7 @@ fun AlertNotesApp(createReminderRequestId: Int = 0) {
         ) { innerPadding ->
             AlertNotesNavHost(
                 navController = navController,
+                onExit = onExit,
                 modifier = Modifier
                     .padding(innerPadding)
                     .consumeWindowInsets(innerPadding)

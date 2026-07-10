@@ -20,6 +20,7 @@ import com.alertnotes.features.backup.BackupScreen
 import com.alertnotes.features.calendar.CalendarScreen
 import com.alertnotes.features.history.HistoryScreen
 import com.alertnotes.features.home.HomeScreen
+import com.alertnotes.features.more.MoreScreen
 import com.alertnotes.features.profile.ProfileScreen
 import com.alertnotes.features.reminders.RemindersScreen
 import com.alertnotes.features.reminders.editor.ReminderEditorScreen
@@ -38,6 +39,7 @@ private const val TRANSITION_MILLIS = 260
 @Composable
 fun AlertNotesNavHost(
     navController: NavHostController,
+    onExit: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     NavHost(
@@ -58,10 +60,11 @@ fun AlertNotesNavHost(
         composable<HomeRoute> {
             HomeScreen(
                 onOpenReminders = { navController.navigateToTopLevel(RemindersRoute) },
-                onOpenCalendar = { navController.navigateToTopLevel(CalendarRoute) },
+                onOpenCalendar = { navController.navigate(CalendarRoute) },
                 onCreateReminder = { navController.navigate(ReminderEditorRoute(Reminder.NEW_ID)) },
-                onOpenSettings = { navController.navigateToTopLevel(SettingsRoute) },
+                onOpenSettings = { navController.navigate(SettingsRoute) },
                 onOpenBackup = { navController.navigate(BackupRoute) },
+                onOpenFriends = { navController.navigateToTopLevel(FriendsRoute) },
             )
         }
         composable<CalendarRoute> {
@@ -103,7 +106,16 @@ fun AlertNotesNavHost(
         }
         composable<ProfileRoute> {
             ProfileScreen(
-                onOpenSettings = { navController.navigateToTopLevel(SettingsRoute) },
+                onOpenSettings = { navController.navigate(SettingsRoute) },
+            )
+        }
+        composable<MoreRoute> {
+            MoreScreen(
+                onOpenCalendar = { navController.navigate(CalendarRoute) },
+                onOpenHistory = { navController.navigate(HistoryRoute) },
+                onOpenSettings = { navController.navigate(SettingsRoute) },
+                onOpenDiagnostics = { navController.navigate(ReliabilityRoute) },
+                onExit = onExit,
             )
         }
         composable<FriendsRoute> {

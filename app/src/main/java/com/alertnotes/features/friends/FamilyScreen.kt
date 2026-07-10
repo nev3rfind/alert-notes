@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.outlined.Verified
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -42,6 +44,7 @@ fun FamilyScreen(
     val incomingFamily by viewModel.incomingFamily.collectAsStateWithLifecycle()
     val outgoingFamily by viewModel.outgoingFamily.collectAsStateWithLifecycle()
     val notice by viewModel.notice.collectAsStateWithLifecycle()
+    val familyEstablished by viewModel.familyEstablished.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -143,5 +146,35 @@ fun FamilyScreen(
 
     notice?.let { error ->
         FriendNoticeDialog(error = error, onDismiss = viewModel::dismissNotice)
+    }
+    if (familyEstablished) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = viewModel::dismissFamilyEstablished,
+            shape = MaterialTheme.shapes.extraLarge,
+            icon = {
+                Icon(
+                    imageVector = Icons.Outlined.Verified,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            },
+            title = {
+                Text(
+                    text = stringResource(R.string.family_established_title),
+                    style = MaterialTheme.typography.titleLarge,
+                )
+            },
+            text = {
+                Text(
+                    text = stringResource(R.string.family_established_message),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = viewModel::dismissFamilyEstablished) {
+                    Text(text = stringResource(R.string.action_done))
+                }
+            },
+        )
     }
 }

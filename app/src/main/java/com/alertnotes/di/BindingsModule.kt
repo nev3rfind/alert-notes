@@ -10,6 +10,7 @@ import com.alertnotes.data.repository.AuthRepositoryImpl
 import com.alertnotes.data.repository.CloudBackupRepositoryImpl
 import com.alertnotes.data.repository.FriendRepositoryImpl
 import com.alertnotes.data.repository.ReminderHistoryRepositoryImpl
+import com.alertnotes.data.repository.ReminderSharingRepositoryImpl
 import com.alertnotes.data.repository.ReminderQueueRepositoryImpl
 import com.alertnotes.data.repository.ReminderRepositoryImpl
 import com.alertnotes.data.repository.SettingsRepositoryImpl
@@ -19,6 +20,7 @@ import com.alertnotes.domain.repository.CloudBackupRepository
 import com.alertnotes.domain.repository.FriendRepository
 import com.alertnotes.domain.repository.ReminderHistoryRepository
 import com.alertnotes.domain.repository.ReminderQueueRepository
+import com.alertnotes.domain.repository.ReminderSharingRepository
 import com.alertnotes.domain.repository.ReminderRepository
 import com.alertnotes.domain.repository.SettingsRepository
 import com.alertnotes.domain.repository.UserProfileRepository
@@ -63,6 +65,11 @@ abstract class BindingsModule {
 
     @Binds
     abstract fun bindFriendRepository(impl: FriendRepositoryImpl): FriendRepository
+
+    @Binds
+    abstract fun bindReminderSharingRepository(
+        impl: ReminderSharingRepositoryImpl,
+    ): ReminderSharingRepository
 
     @Binds
     abstract fun bindReminderScheduler(impl: AlarmManagerReminderScheduler): ReminderScheduler

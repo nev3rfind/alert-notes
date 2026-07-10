@@ -75,4 +75,12 @@ object FirestoreSchema {
      * just different values on the two sides.
      */
     const val FAMILY = "family"
+
+    /**
+     * Reminder shares, top-level `reminderShares/{ownerUid}_{reminderId}_{recipientUid}`.
+     * Owner-writable, readable by owner and recipient. The reminder body
+     * stays in the owner's local database; this is only the sharing edge
+     * plus a title snapshot. Foundation for the sharing/delivery session.
+     */
+    const val REMINDER_SHARES = "reminderShares"
 }

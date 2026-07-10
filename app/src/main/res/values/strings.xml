@@ -25,6 +25,21 @@
     <string name="nav_history">History</string>
     <string name="nav_settings">Settings</string>
     <string name="nav_exit">Exit</string>
+    <string name="nav_more">More</string>
+
+    <!-- More hub -->
+    <string name="more_section_app">App</string>
+    <string name="more_calendar_subtitle">Month, week, and timeline views</string>
+    <string name="more_history_subtitle">When reminders fired and how they resolved</string>
+    <string name="more_section_system">System</string>
+    <string name="more_settings_subtitle">Theme, notifications, mode, and data</string>
+    <string name="more_section_exit">Exit</string>
+
+    <!-- Connection status card -->
+    <string name="connection_online">Online</string>
+    <string name="connection_offline">Offline</string>
+    <string name="connection_online_subtitle">Cloud features available</string>
+    <string name="connection_offline_subtitle">Everything stays on this device</string>
 
     <!-- Calendar -->
     <string name="calendar_mode_month">Month</string>
@@ -71,6 +86,8 @@
     <string name="home_calendar_preview">Calendar</string>
     <string name="home_quick_actions_title">Quick actions</string>
     <string name="home_action_new_reminder">New reminder</string>
+    <string name="home_action_find_friends">Find friends</string>
+    <string name="home_action_invite_family">Invite family</string>
     <string name="home_action_backup">Backup &amp; restore</string>
     <string name="home_action_settings">Settings</string>
     <string name="home_recent_title">Recent activity</string>
@@ -743,6 +760,8 @@
     <string name="family_centre_row_subtitle">Members, invitations, and permissions</string>
     <string name="family_centre_row_pending">%1$d pending invitation(s)</string>
     <string name="family_invite_short">Family</string>
+    <string name="family_established_title">Family relationship established</string>
+    <string name="family_established_message">You\'re now family. You can later enable automatic reminder delivery for each other from the family member\'s permissions — and you stay in control of those permissions at all times.</string>
 
     <!-- Reminder reliability -->
     <string name="settings_reliability_row">Reminder reliability</string>

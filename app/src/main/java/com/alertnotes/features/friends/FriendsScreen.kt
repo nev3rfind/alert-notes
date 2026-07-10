@@ -112,6 +112,11 @@ class FriendsViewModel @Inject constructor(
     private val _notice = MutableStateFlow<FriendError?>(null)
     val notice: StateFlow<FriendError?> = _notice.asStateFlow()
 
+    /** True right after a family invitation is accepted; drives a one-shot
+     * "relationship established" confirmation. */
+    private val _familyEstablished = MutableStateFlow(false)
+    val familyEstablished: StateFlow<Boolean> = _familyEstablished.asStateFlow()
+
     fun onQueryChange(value: String) {
         _query.value = value
     }
@@ -127,7 +132,13 @@ class FriendsViewModel @Inject constructor(
     /** Family always begins as a friend; the repository enforces it too. */
     fun inviteToFamily(uid: String) = act { friendRepository.inviteToFamily(uid, "") }
 
-    fun acceptFamily(id: String) = act { friendRepository.acceptFamilyInvitation(id) }
+    fun acceptFamily(id: String) = act(onSuccess = { _familyEstablished.value = true }) {
+        friendRepository.acceptFamilyInvitation(id)
+    }
+
+    fun dismissFamilyEstablished() {
+        _familyEstablished.value = false
+    }
 
     fun declineFamily(id: String) = act { friendRepository.declineFamilyInvitation(id) }
 
@@ -142,10 +153,11 @@ class FriendsViewModel @Inject constructor(
         _notice.value = null
     }
 
-    private fun act(operation: suspend () -> Unit) {
+    private fun act(onSuccess: (() -> Unit)? = null, operation: suspend () -> Unit) {
         viewModelScope.launch {
             try {
                 operation()
+                onSuccess?.invoke()
             } catch (exception: FriendException) {
                 _notice.value = exception.error
             }
