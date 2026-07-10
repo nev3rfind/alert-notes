@@ -29,4 +29,11 @@ object FirebaseModule {
     @Provides
     @Singleton
     fun provideFirebaseStorage(): FirebaseStorage = FirebaseStorage.getInstance()
+
+    /** FCM arrives in a later session; the seam exists now. */
+    @Provides
+    @Singleton
+    fun providePushNotificationService():
+        com.alertnotes.domain.repository.PushNotificationService =
+        com.alertnotes.domain.repository.NoOpPushNotificationService()
 }

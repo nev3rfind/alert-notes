@@ -30,6 +30,13 @@ data object ShareReminderRoute
 @Serializable
 data object SharedRemindersRoute
 
+@Serializable
+data object InboxRoute
+
+/** 1:1 conversation with [otherUid]. */
+@Serializable
+data class ChatRoute(val otherUid: String)
+
 /** Another user's public profile. */
 @Serializable
 data class PublicProfileRoute(val uid: String)

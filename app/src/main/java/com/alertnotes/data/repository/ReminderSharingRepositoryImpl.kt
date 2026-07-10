@@ -59,8 +59,18 @@ class ReminderSharingRepositoryImpl @Inject constructor(
     private val friendRepository: FriendRepository,
     private val coordinator: ReminderSchedulingCoordinator,
     private val firestore: FirebaseFirestore,
+    private val chatRepository: com.alertnotes.domain.repository.ChatRepository,
     private val logger: AppLogger,
 ) : ReminderSharingRepository {
+
+    /** Chat context is best-effort — sharing never fails over a message. */
+    private suspend fun narrate(
+        otherUid: String,
+        kind: com.alertnotes.domain.model.SystemMessageKind,
+    ) {
+        runCatching { chatRepository.postSystemMessage(otherUid, kind) }
+            .onFailure { logger.d(TAG, "Chat narration skipped: ${it.message}") }
+    }
 
     private val json = Json {
         ignoreUnknownKeys = true
@@ -122,6 +132,9 @@ class ReminderSharingRepositoryImpl @Inject constructor(
                 ),
             ).await()
         }
+        recipientUids.forEach {
+            narrate(it, com.alertnotes.domain.model.SystemMessageKind.REMINDER_SHARED)
+        }
         logger.i(TAG, "Reminder shared with ${recipientUids.size} recipient(s)")
     }
 
@@ -141,6 +154,7 @@ class ReminderSharingRepositoryImpl @Inject constructor(
             SetOptions.merge(),
         ).await()
         deliverLocally(share)
+        narrate(share.ownerUid, com.alertnotes.domain.model.SystemMessageKind.REMINDER_ACCEPTED)
     }
 
     override suspend fun declineShare(shareId: String) = runShareOp {
@@ -152,6 +166,10 @@ class ReminderSharingRepositoryImpl @Inject constructor(
             ),
             SetOptions.merge(),
         ).await()
+        // The id encodes the owner: {owner}_{reminderId}_{recipient}.
+        shareId.substringBefore('_').takeIf { it.isNotBlank() }?.let {
+            narrate(it, com.alertnotes.domain.model.SystemMessageKind.REMINDER_REJECTED)
+        }
         Unit
     }
 

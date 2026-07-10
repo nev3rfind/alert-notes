@@ -755,6 +755,31 @@
     <string name="friends_error_not_friends">You can only invite friends to your family. Send a friend request first.</string>
     <string name="friends_error_already_family">You\'re already family.</string>
     <string name="friends_error_permission">The server rejected this action. The Firestore security rules in the Firebase console need to be updated to the latest version.</string>
+    <!-- Chat & inbox -->
+    <string name="chat_title">Chat</string>
+    <string name="chat_typing">typing…</string>
+    <string name="chat_empty">No messages yet. Say hello — reminders you share with each other will show up here too.</string>
+    <string name="chat_input_hint">Message</string>
+    <string name="chat_send">Send</string>
+    <string name="chat_status_sent">Sent</string>
+    <string name="chat_status_delivered">Delivered</string>
+    <string name="chat_status_read">Read</string>
+    <string name="chat_copy">Copy</string>
+    <string name="chat_delete_for_me">Delete for me</string>
+    <string name="chat_system_shared_mine">You shared a reminder</string>
+    <string name="chat_system_shared_theirs">Shared a reminder with you</string>
+    <string name="chat_system_accepted">Reminder accepted</string>
+    <string name="chat_system_rejected">Reminder declined</string>
+    <string name="chat_system_generic">Reminder update</string>
+    <string name="inbox_title">Inbox</string>
+    <string name="inbox_row_subtitle">Requests, invitations, and conversations in one place</string>
+    <string name="inbox_search_hint">Search conversations</string>
+    <string name="inbox_friend_requests">%1$d friend request(s) waiting</string>
+    <string name="inbox_family_invitations">%1$d family invitation(s) waiting</string>
+    <string name="inbox_reminder_invitations">%1$d incoming reminder(s) to review</string>
+    <string name="inbox_conversations">Conversations</string>
+    <string name="inbox_empty">No conversations yet. Open a friend\'s profile and send the first message.</string>
+
     <!-- Reminder sharing -->
     <string name="sharing_section_title">Reminder sharing</string>
     <string name="sharing_share_row">Share a reminder</string>

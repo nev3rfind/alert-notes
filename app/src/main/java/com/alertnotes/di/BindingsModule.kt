@@ -67,6 +67,11 @@ abstract class BindingsModule {
     abstract fun bindFriendRepository(impl: FriendRepositoryImpl): FriendRepository
 
     @Binds
+    abstract fun bindChatRepository(
+        impl: com.alertnotes.data.repository.ChatRepositoryImpl,
+    ): com.alertnotes.domain.repository.ChatRepository
+
+    @Binds
     abstract fun bindReminderSharingRepository(
         impl: ReminderSharingRepositoryImpl,
     ): ReminderSharingRepository

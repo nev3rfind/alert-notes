@@ -29,6 +29,8 @@ import com.alertnotes.features.friends.FriendsScreen
 import com.alertnotes.features.friends.PublicProfileScreen
 import com.alertnotes.features.settings.ReliabilityScreen
 import com.alertnotes.features.settings.SettingsScreen
+import com.alertnotes.features.chat.ChatScreen
+import com.alertnotes.features.chat.InboxScreen
 import com.alertnotes.features.sharing.ShareReminderScreen
 import com.alertnotes.features.sharing.SharedRemindersScreen
 
@@ -117,6 +119,7 @@ fun AlertNotesNavHost(
                 onOpenHistory = { navController.navigate(HistoryRoute) },
                 onOpenSettings = { navController.navigate(SettingsRoute) },
                 onOpenDiagnostics = { navController.navigate(ReliabilityRoute) },
+                onOpenInbox = { navController.navigate(InboxRoute) },
                 onOpenShareReminder = { navController.navigate(ShareReminderRoute) },
                 onOpenSharedReminders = { navController.navigate(SharedRemindersRoute) },
                 onExit = onExit,
@@ -153,6 +156,17 @@ fun AlertNotesNavHost(
         }
         composable<SharedRemindersRoute> {
             SharedRemindersScreen(onNavigateBack = navController::navigateUp)
+        }
+        composable<InboxRoute> {
+            InboxScreen(
+                onOpenUser = { uid -> navController.navigate(PublicProfileRoute(uid)) },
+                onOpenChat = { uid -> navController.navigate(ChatRoute(uid)) },
+                onOpenSharedReminders = { navController.navigate(SharedRemindersRoute) },
+                onOpenFriends = { navController.navigateToTopLevel(FriendsRoute) },
+            )
+        }
+        composable<ChatRoute> {
+            ChatScreen(onNavigateBack = navController::navigateUp)
         }
         composable<HistoryRoute> {
             HistoryScreen(onNavigateBack = navController::navigateUp)

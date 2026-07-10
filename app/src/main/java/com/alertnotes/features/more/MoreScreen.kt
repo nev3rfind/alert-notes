@@ -15,6 +15,7 @@ import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.CloudSync
 import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Verified
@@ -45,6 +46,7 @@ fun MoreScreen(
     onOpenHistory: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenDiagnostics: () -> Unit,
+    onOpenInbox: () -> Unit,
     onOpenShareReminder: () -> Unit,
     onOpenSharedReminders: () -> Unit,
     onExit: () -> Unit,
@@ -89,6 +91,13 @@ fun MoreScreen(
                 }
                 item {
                     SectionCard(title = stringResource(R.string.sharing_section_title)) {
+                        AppListItem(
+                            title = stringResource(R.string.inbox_title),
+                            supportingText = stringResource(R.string.inbox_row_subtitle),
+                            leadingIcon = Icons.Outlined.Inbox,
+                            onClick = onOpenInbox,
+                            trailingContent = { Chevron() },
+                        )
                         AppListItem(
                             title = stringResource(R.string.sharing_share_row),
                             supportingText = stringResource(R.string.sharing_share_row_subtitle),

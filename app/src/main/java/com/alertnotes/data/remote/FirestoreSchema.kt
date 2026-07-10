@@ -53,6 +53,14 @@ object FirestoreSchema {
     const val USERNAMES = "usernames"
 
     /**
+     * 1:1 conversations, doc id = the two uids sorted and joined with `_`
+     * (deterministic — one conversation per pair). Messages live in the
+     * [CHAT_MESSAGES] subcollection.
+     */
+    const val CHATS = "chats"
+    const val CHAT_MESSAGES = "messages"
+
+    /**
      * Top-level friend requests, doc id `{fromUid}_{toUid}` — deterministic
      * so a duplicate request is structurally impossible. Future Cloud
      * Functions validate transitions server-side on this collection.
