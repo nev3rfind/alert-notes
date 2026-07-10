@@ -93,6 +93,8 @@ data class ReminderShare(
     val ackDelaySeconds: Long? = null,
     /** Signature vector JSON when the acknowledgement was a signature. */
     val ackSignature: String = "",
+    /** Storage URL of the live camera proof when the method was PHOTO. */
+    val ackPhotoUrl: String = "",
     val createdAt: Instant?,
     val respondedAt: Instant?,
     val scheduledAt: Instant?,

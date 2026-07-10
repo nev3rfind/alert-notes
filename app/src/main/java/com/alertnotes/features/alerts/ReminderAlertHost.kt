@@ -2,6 +2,8 @@ package com.alertnotes.features.alerts
 
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
@@ -65,9 +67,11 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import com.alertnotes.core.util.AckProofStore
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -631,6 +635,16 @@ private fun AlertActions(
                 GestureHint(text = stringResource(R.string.alert_signature_hint), spec = spec)
             }
 
+            AcknowledgementType.PHOTO -> {
+                PhotoProofButton(
+                    reminderId = reminder.id,
+                    spec = spec,
+                    compact = compact,
+                    onCaptured = { onDismiss(AcknowledgeMethod.PHOTO, null) },
+                )
+                GestureHint(text = stringResource(R.string.alert_photo_hint), spec = spec)
+            }
+
             AcknowledgementType.SWIPE -> {
                 GestureHint(
                     text = stringResource(reminder.swipeDirection.hintRes()),
@@ -663,6 +677,38 @@ private fun AlertActions(
             }
         }
     }
+}
+
+/**
+ * Camera-proof acknowledgement: launches the device camera with a
+ * FileProvider target inside app-private storage. The TakePicture contract
+ * is capture-only by design — there is no gallery path — and the alert is
+ * dismissed ONLY after a successful live capture lands in the proof store,
+ * where the sharing sweep picks it up for upload.
+ */
+@Composable
+private fun PhotoProofButton(
+    reminderId: Long,
+    spec: ReminderThemeSpec,
+    compact: Boolean,
+    onCaptured: () -> Unit,
+) {
+    val context = LocalContext.current
+    val captureUri = remember(reminderId) {
+        AckProofStore.captureUriFor(context, reminderId)
+    }
+    val launcher = rememberLauncherForActivityResult(
+        ActivityResultContracts.TakePicture(),
+    ) { success ->
+        if (success) onCaptured()
+    }
+    AlertPillButton(
+        label = stringResource(R.string.alert_photo_capture),
+        enabled = true,
+        spec = spec,
+        compact = compact,
+        onClick = { launcher.launch(captureUri) },
+    )
 }
 
 /** Inverted pill: content-colored fill, theme-accent label. */

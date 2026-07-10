@@ -127,6 +127,14 @@ class HomeViewModel @Inject constructor(
         .catch { emit(emptyList()) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    /** Shares I sent that ran to completion — the accountability receipt. */
+    val recentlyCompleted: StateFlow<List<ReminderShareWithProfile>> = sharingRepository.outgoingShares
+        .map { shares ->
+            shares.filter { it.share.status == ShareStatus.COMPLETED }.take(DASHBOARD_PREVIEW_COUNT)
+        }
+        .catch { emit(emptyList()) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     private val queuePanel = queueRepository.observePending()
         .mapLatest { pending ->
             pending.take(QUEUE_PANEL_LIMIT).mapNotNull { entry ->

@@ -101,6 +101,7 @@ fun HomeScreen(
     val sharingPulse by viewModel.sharingPulse.collectAsStateWithLifecycle()
     val sharedByMe by viewModel.sharedByMe.collectAsStateWithLifecycle()
     val sharedWithMe by viewModel.sharedWithMe.collectAsStateWithLifecycle()
+    val recentlyCompleted by viewModel.recentlyCompleted.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = { AppTopBar(title = stringResource(R.string.app_name)) },
@@ -157,6 +158,15 @@ fun HomeScreen(
                         SharedRemindersCard(
                             titleRes = R.string.home_shared_with_me,
                             shares = sharedWithMe,
+                            onOpen = onOpenSharedReminders,
+                        )
+                    }
+                }
+                if (recentlyCompleted.isNotEmpty()) {
+                    item {
+                        SharedRemindersCard(
+                            titleRes = R.string.home_recently_completed,
+                            shares = recentlyCompleted,
                             onOpen = onOpenSharedReminders,
                         )
                     }

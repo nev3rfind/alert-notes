@@ -31,6 +31,9 @@ enum class AcknowledgementType {
     SWIPE,
     TICK_GESTURE,
     SIGNATURE,
+
+    /** A live camera capture is the proof; gallery uploads are impossible. */
+    PHOTO,
 }
 
 /**

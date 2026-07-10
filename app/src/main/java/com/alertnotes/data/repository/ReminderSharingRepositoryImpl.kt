@@ -77,6 +77,8 @@ class ReminderSharingRepositoryImpl @Inject constructor(
     private val calculator: NextTriggerCalculator,
     private val timeProvider: TimeProvider,
     private val firestore: FirebaseFirestore,
+    private val storage: com.google.firebase.storage.FirebaseStorage,
+    @param:dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context,
     private val chatRepository: ChatRepository,
     private val identity: OwnIdentityCache,
     private val notificationCentre: com.alertnotes.domain.repository.NotificationCentreRepository,
@@ -394,12 +396,23 @@ class ReminderSharingRepositoryImpl @Inject constructor(
         if (dismissedAt.toEpochMilli() <= (share.ackAt?.toEpochMilli() ?: 0L)) return
         val delaySeconds = java.time.Duration.between(entry.triggeredAt, dismissedAt)
             .seconds.coerceAtLeast(0)
+        val photoUrl = uploadPhotoProof(share, localId, method, dismissedAt)
+        if (
+            method == com.alertnotes.domain.model.AcknowledgeMethod.PHOTO &&
+            photoUrl.isEmpty() &&
+            com.alertnotes.core.util.AckProofStore.fileFor(context, localId).exists()
+        ) {
+            // Proof exists but the upload failed (offline, quota): leave the
+            // mirror untouched so the next sweep retries with the photo.
+            return
+        }
         shareReference(share.id).set(
             mapOf(
                 "ackMethod" to method.name,
                 "ackAtMillis" to dismissedAt.toEpochMilli(),
                 "ackDelaySeconds" to delaySeconds,
                 "ackSignature" to (entry.signature?.toJson().orEmpty()),
+                "ackPhotoUrl" to photoUrl,
                 "lastSyncAt" to FieldValue.serverTimestamp(),
             ),
             SetOptions.merge(),
@@ -413,6 +426,39 @@ class ReminderSharingRepositoryImpl @Inject constructor(
             dedupeKey = "share_${share.id}_ack",
         )
         logger.i(TAG, "Acknowledgement mirrored for ${share.id} (${method.name})")
+    }
+
+    /**
+     * Live camera proof: the alert host stored the capture in app-private
+     * storage; it travels to Firebase Storage under the recipient's own
+     * prefix (rules keep writes owner-scoped) and only the download URL
+     * lands in the share document. Empty string when not a photo
+     * acknowledgement or the proof file is gone.
+     */
+    private suspend fun uploadPhotoProof(
+        share: ReminderShare,
+        localReminderId: Long,
+        method: com.alertnotes.domain.model.AcknowledgeMethod,
+        dismissedAt: Instant,
+    ): String {
+        if (method != com.alertnotes.domain.model.AcknowledgeMethod.PHOTO) return ""
+        val me = auth.currentUser?.uid ?: return ""
+        val file = com.alertnotes.core.util.AckProofStore.fileFor(context, localReminderId)
+        if (!file.exists()) {
+            logger.w(TAG, "Photo proof missing for ${share.id} — acknowledging without image")
+            return ""
+        }
+        return runCatching {
+            val reference = storage.reference
+                .child("ackProofs/$me/${share.id}_${dismissedAt.toEpochMilli()}.jpg")
+            reference.putFile(android.net.Uri.fromFile(file)).await()
+            val url = reference.downloadUrl.await().toString()
+            file.delete()
+            url
+        }.getOrElse {
+            logger.w(TAG, "Photo proof upload failed for ${share.id}", it)
+            ""
+        }
     }
 
     /** Mirrors the recipient-side fire/completion state back to the owner. */
@@ -637,6 +683,7 @@ class ReminderSharingRepositoryImpl @Inject constructor(
             ackAt = getLong("ackAtMillis")?.let(Instant::ofEpochMilli),
             ackDelaySeconds = getLong("ackDelaySeconds"),
             ackSignature = getString("ackSignature").orEmpty(),
+            ackPhotoUrl = getString("ackPhotoUrl").orEmpty(),
             createdAt = instantField("createdAt"),
             respondedAt = instantField("respondedAt"),
             scheduledAt = instantField("scheduledAt"),

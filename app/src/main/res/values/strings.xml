@@ -34,6 +34,7 @@
     <string name="home_shared_by_me">Shared by me</string>
     <string name="home_shared_with_me">Shared with me</string>
     <string name="home_shared_open_all">Open tracking</string>
+    <string name="home_recently_completed">Recently completed</string>
 
     <!-- Notification Centre + push channels + presence -->
     <string name="notifications_title">Notifications</string>
@@ -96,6 +97,10 @@
     <string name="sharing_ack_label">Acknowledged</string>
     <string name="sharing_ack_delay">Response time</string>
     <string name="sharing_ack_signature_cd">Recipient\'s acknowledgement signature</string>
+    <string name="sharing_ack_photo_cd">Recipient\'s camera-proof photo — tap to view full screen</string>
+    <string name="ack_photo">Camera proof</string>
+    <string name="alert_photo_capture">Take photo to acknowledge</string>
+    <string name="alert_photo_hint">A live photo is required — the camera opens, no gallery</string>
     <string name="chat_system_assigned_mine">You assigned a reminder</string>
     <string name="chat_system_assigned_theirs">This reminder was assigned to you</string>
 

@@ -713,6 +713,7 @@ fun AcknowledgementType.labelRes(): Int = when (this) {
     AcknowledgementType.SWIPE -> R.string.ack_swipe
     AcknowledgementType.TICK_GESTURE -> R.string.ack_tick
     AcknowledgementType.SIGNATURE -> R.string.ack_signature
+    AcknowledgementType.PHOTO -> R.string.ack_photo
 }
 
 @StringRes

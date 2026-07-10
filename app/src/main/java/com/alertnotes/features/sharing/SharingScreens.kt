@@ -747,6 +747,9 @@ private fun OutgoingShareCard(
             share.ackSignature.toReminderDrawingOrNull()?.let { signature ->
                 SignaturePreview(signature = signature)
             }
+            if (share.ackPhotoUrl.isNotBlank()) {
+                PhotoProofPreview(url = share.ackPhotoUrl)
+            }
         }
         if (share.updateRequested && share.hasPendingUpdate) {
             Text(
@@ -834,6 +837,41 @@ private fun SignaturePreview(signature: com.alertnotes.domain.model.ReminderDraw
         drawReminderStrokes(signature.strokes)
     }
 }
+
+/** The live camera proof; tap to inspect it full screen. */
+@Composable
+private fun PhotoProofPreview(url: String) {
+    var showFullScreen by androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateOf(false)
+    }
+    coil.compose.AsyncImage(
+        model = url,
+        contentDescription = stringResource(R.string.sharing_ack_photo_cd),
+        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = MaterialTheme.spacing.extraSmall)
+            .aspectRatio(PHOTO_PREVIEW_ASPECT)
+            .clip(MaterialTheme.shapes.small)
+            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+            .clickable { showFullScreen = true },
+    )
+    if (showFullScreen) {
+        androidx.compose.ui.window.Dialog(onDismissRequest = { showFullScreen = false }) {
+            coil.compose.AsyncImage(
+                model = url,
+                contentDescription = stringResource(R.string.sharing_ack_photo_cd),
+                contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(MaterialTheme.shapes.large)
+                    .clickable { showFullScreen = false },
+            )
+        }
+    }
+}
+
+private const val PHOTO_PREVIEW_ASPECT = 4f / 3f
 
 /** Human response delay: seconds under a minute, then minutes, then hours. */
 private fun formatResponseDelay(seconds: Long): String = when {
