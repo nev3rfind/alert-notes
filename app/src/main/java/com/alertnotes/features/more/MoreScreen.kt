@@ -13,7 +13,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.CloudSync
 import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Verified
 import androidx.compose.material3.Icon
@@ -43,6 +45,8 @@ fun MoreScreen(
     onOpenHistory: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenDiagnostics: () -> Unit,
+    onOpenShareReminder: () -> Unit,
+    onOpenSharedReminders: () -> Unit,
     onExit: () -> Unit,
 ) {
     Scaffold(
@@ -79,6 +83,24 @@ fun MoreScreen(
                             supportingText = stringResource(R.string.more_history_subtitle),
                             leadingIcon = Icons.Outlined.History,
                             onClick = onOpenHistory,
+                            trailingContent = { Chevron() },
+                        )
+                    }
+                }
+                item {
+                    SectionCard(title = stringResource(R.string.sharing_section_title)) {
+                        AppListItem(
+                            title = stringResource(R.string.sharing_share_row),
+                            supportingText = stringResource(R.string.sharing_share_row_subtitle),
+                            leadingIcon = Icons.Outlined.Share,
+                            onClick = onOpenShareReminder,
+                            trailingContent = { Chevron() },
+                        )
+                        AppListItem(
+                            title = stringResource(R.string.sharing_dashboard_row),
+                            supportingText = stringResource(R.string.sharing_dashboard_row_subtitle),
+                            leadingIcon = Icons.Outlined.CloudSync,
+                            onClick = onOpenSharedReminders,
                             trailingContent = { Chevron() },
                         )
                     }

@@ -1,8 +1,17 @@
 package com.alertnotes.data.repository
 
+import com.alertnotes.core.extensions.toDisplayDateTime
 import com.alertnotes.core.util.AppLogger
+import com.alertnotes.data.backup.BackupReminder
+import com.alertnotes.data.backup.toBackup
+import com.alertnotes.data.backup.toEntity
+import com.alertnotes.data.entities.toDomain
+import com.alertnotes.data.entities.toEntity
 import com.alertnotes.data.remote.FirestoreSchema
+import com.alertnotes.domain.model.FriendError
+import com.alertnotes.domain.model.FriendException
 import com.alertnotes.domain.model.PublicProfile
+import com.alertnotes.domain.model.Reminder
 import com.alertnotes.domain.model.ReminderShare
 import com.alertnotes.domain.model.ReminderShareWithProfile
 import com.alertnotes.domain.model.RelationshipType
@@ -10,12 +19,14 @@ import com.alertnotes.domain.model.ShareStatus
 import com.alertnotes.domain.repository.AuthRepository
 import com.alertnotes.domain.repository.FriendRepository
 import com.alertnotes.domain.repository.ReminderSharingRepository
+import com.alertnotes.domain.scheduling.ReminderSchedulingCoordinator
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.DocumentReference
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
+import java.io.IOException
 import java.time.Instant
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -28,24 +39,33 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
+import kotlinx.serialization.json.Json
 
 /**
- * Firestore-backed sharing edges. Foundation implementation: it can create,
- * observe, and resolve share records, and it derives approval-vs-auto from
- * the family graph — but it performs no delivery or scheduling. The reminder
- * body stays in the owner's local Room database; only a title snapshot and
- * the relationship live here. Mirrors the friend/family repositories'
- * listener + deterministic-id patterns so the later delivery session can
- * build on it without reshaping data.
+ * Firestore-backed reminder sharing, V1. Deterministic
+ * `{owner}_{reminderId}_{recipient}` ids make duplicate shares impossible;
+ * the reminder body travels as the same versioned backup-DTO JSON the ZIP
+ * export uses, so both formats evolve together. Delivery reconstructs the
+ * reminder locally and schedules it through the normal coordinator — after
+ * that it is an ordinary local reminder and works fully offline. Idempotency
+ * lives in `recipientReminderId`: a share that already carries one is never
+ * delivered again, so listener replays, process restarts, and re-opens can't
+ * double-schedule.
  */
 @Singleton
 class ReminderSharingRepositoryImpl @Inject constructor(
     private val auth: FirebaseAuth,
     authRepository: AuthRepository,
     private val friendRepository: FriendRepository,
+    private val coordinator: ReminderSchedulingCoordinator,
     private val firestore: FirebaseFirestore,
     private val logger: AppLogger,
 ) : ReminderSharingRepository {
+
+    private val json = Json {
+        ignoreUnknownKeys = true
+        encodeDefaults = true
+    }
 
     @OptIn(ExperimentalCoroutinesApi::class)
     override val outgoingShares: Flow<List<ReminderShareWithProfile>> =
@@ -60,48 +80,136 @@ class ReminderSharingRepositoryImpl @Inject constructor(
         }
 
     override suspend fun shareReminder(
-        reminderId: Long,
-        reminderTitle: String,
-        recipientUid: String,
-    ) {
-        val owner = auth.currentUser?.uid ?: return
-        // Family members with auto-delivery skip approval; everyone else is
-        // approval-required. Reading the family edge keeps that decision in
-        // one place for the future delivery layer and the security rules.
-        val familyMember = friendRepository.family.first().firstOrNull { it.uid == recipientUid }
-        val autoDeliver = familyMember?.permissions?.autoReceiveReminders == true
-        val relationship = if (familyMember != null) {
-            RelationshipType.FAMILY
-        } else {
-            RelationshipType.FRIEND
+        reminder: Reminder,
+        recipientUids: List<String>,
+    ) = runShareOp {
+        val owner = auth.currentUser?.uid ?: throw FriendException(FriendError.UNKNOWN)
+        val payload = json.encodeToString(
+            BackupReminder.serializer(),
+            reminder.toEntity().toBackup(),
+        )
+        val scheduleSummary = reminder.nextTriggerAt
+            ?.toDisplayDateTime(reminder.timeZone)
+            .orEmpty()
+        val familyMembers = friendRepository.family.first()
+        recipientUids.forEach { recipientUid ->
+            val familyMember = familyMembers.firstOrNull { it.uid == recipientUid }
+            val autoDeliver = familyMember?.permissions?.autoReceiveReminders == true
+            val relationship = if (familyMember != null) {
+                RelationshipType.FAMILY
+            } else {
+                RelationshipType.FRIEND
+            }
+            // Family with auto-delivery is released immediately; everyone
+            // else waits as a PENDING invitation.
+            val status = if (autoDeliver) ShareStatus.DELIVERED else ShareStatus.PENDING
+            shareDocument(owner, reminder.id, recipientUid).set(
+                mapOf(
+                    "reminderId" to reminder.id,
+                    "ownerUid" to owner,
+                    "recipientUid" to recipientUid,
+                    "relationship" to relationship.name,
+                    "approvalRequired" to !autoDeliver,
+                    "status" to status.name,
+                    "title" to reminder.title,
+                    "scheduleSummary" to scheduleSummary,
+                    "payload" to payload,
+                    "recipientReminderId" to null,
+                    "createdAt" to FieldValue.serverTimestamp(),
+                    "respondedAt" to null,
+                    "scheduledAt" to null,
+                    "lastSyncAt" to FieldValue.serverTimestamp(),
+                ),
+            ).await()
         }
-        val status = if (autoDeliver) ShareStatus.AUTO_ACCEPTED else ShareStatus.PENDING
-        shareDocument(owner, reminderId, recipientUid).set(
-            mapOf(
-                "reminderId" to reminderId,
-                "ownerUid" to owner,
-                "recipientUid" to recipientUid,
-                "relationship" to relationship.name,
-                "approvalRequired" to !autoDeliver,
-                "status" to status.name,
-                "title" to reminderTitle,
-                "createdAt" to FieldValue.serverTimestamp(),
-            ),
-        ).await()
-        logger.i(TAG, "Reminder shared (foundation record only, no delivery yet)")
+        logger.i(TAG, "Reminder shared with ${recipientUids.size} recipient(s)")
     }
 
-    override suspend fun acceptShare(shareId: String) = setStatus(shareId, ShareStatus.ACCEPTED)
+    override suspend fun acceptShare(share: ReminderShare) = runShareOp {
+        if (share.status != ShareStatus.PENDING) {
+            // Already answered on another device — nothing to do.
+            throw FriendException(FriendError.ALREADY_PENDING)
+        }
+        // ACCEPTED lands first so the sender's dashboard shows the approval
+        // even if the download below is slow or interrupted.
+        shareReference(share.id).set(
+            mapOf(
+                "status" to ShareStatus.ACCEPTED.name,
+                "respondedAt" to FieldValue.serverTimestamp(),
+                "lastSyncAt" to FieldValue.serverTimestamp(),
+            ),
+            SetOptions.merge(),
+        ).await()
+        deliverLocally(share)
+    }
 
-    override suspend fun declineShare(shareId: String) = setStatus(shareId, ShareStatus.DECLINED)
+    override suspend fun declineShare(shareId: String) = runShareOp {
+        shareReference(shareId).set(
+            mapOf(
+                "status" to ShareStatus.REJECTED.name,
+                "respondedAt" to FieldValue.serverTimestamp(),
+                "lastSyncAt" to FieldValue.serverTimestamp(),
+            ),
+            SetOptions.merge(),
+        ).await()
+        Unit
+    }
 
-    override suspend fun revokeShare(shareId: String) = setStatus(shareId, ShareStatus.REVOKED)
+    override suspend fun cancelShare(shareId: String) = runShareOp {
+        shareReference(shareId).set(
+            mapOf(
+                "status" to ShareStatus.CANCELLED.name,
+                "respondedAt" to FieldValue.serverTimestamp(),
+                "lastSyncAt" to FieldValue.serverTimestamp(),
+            ),
+            SetOptions.merge(),
+        ).await()
+        Unit
+    }
 
-    private suspend fun setStatus(shareId: String, status: ShareStatus) {
-        firestore.collection(FirestoreSchema.REMINDER_SHARES)
-            .document(shareId)
-            .set(mapOf("status" to status.name), SetOptions.merge())
-            .await()
+    override suspend fun deliverReleasedShares() {
+        val me = auth.currentUser?.uid ?: return
+        val released = runCatching {
+            firestore.collection(FirestoreSchema.REMINDER_SHARES)
+                .whereEqualTo("recipientUid", me)
+                .whereEqualTo("status", ShareStatus.DELIVERED.name)
+                .get()
+                .await()
+                .documents
+                .map { it.toShare() }
+        }.getOrDefault(emptyList())
+        released.forEach { share ->
+            runCatching { deliverLocally(share) }
+                .onFailure { logger.w(TAG, "Auto-delivery failed for ${share.id}", it) }
+        }
+    }
+
+    /**
+     * The actual download: payload → entity → domain → coordinator. The
+     * recipientReminderId guard makes this idempotent; the coordinator's
+     * mutex makes the scheduling side safe.
+     */
+    private suspend fun deliverLocally(share: ReminderShare) {
+        if (share.recipientReminderId != null) return
+        if (share.payload.isBlank()) {
+            logger.w(TAG, "Share ${share.id} has no payload — cannot deliver")
+            return
+        }
+        val backup = json.decodeFromString(BackupReminder.serializer(), share.payload)
+        // toEntity() resets the id, so this always inserts a NEW local
+        // reminder; the sender's copy is untouched.
+        val reminder = backup.toEntity().toDomain()
+        val localId = coordinator.saveAndSchedule(reminder)
+        shareReference(share.id).set(
+            mapOf(
+                "status" to ShareStatus.SCHEDULED.name,
+                "recipientReminderId" to localId,
+                "scheduledAt" to FieldValue.serverTimestamp(),
+                "lastSyncAt" to FieldValue.serverTimestamp(),
+            ),
+            SetOptions.merge(),
+        ).await()
+        logger.i(TAG, "Shared reminder delivered and scheduled locally")
     }
 
     private fun shares(
@@ -138,10 +246,19 @@ class ReminderSharingRepositoryImpl @Inject constructor(
             .firstOrNull { it.name == getString("relationship") } ?: RelationshipType.FRIEND,
         approvalRequired = getBoolean("approvalRequired") != false,
         status = ShareStatus.entries
-            .firstOrNull { it.name == getString("status") } ?: ShareStatus.REVOKED,
+            .firstOrNull { it.name == getString("status") } ?: ShareStatus.CANCELLED,
         title = getString("title").orEmpty(),
-        createdAt = getTimestamp("createdAt")?.toDate()?.toInstant(),
+        scheduleSummary = getString("scheduleSummary").orEmpty(),
+        payload = getString("payload").orEmpty(),
+        recipientReminderId = getLong("recipientReminderId"),
+        createdAt = instantField("createdAt"),
+        respondedAt = instantField("respondedAt"),
+        scheduledAt = instantField("scheduledAt"),
+        lastSyncAt = instantField("lastSyncAt"),
     )
+
+    private fun shareReference(shareId: String): DocumentReference =
+        firestore.collection(FirestoreSchema.REMINDER_SHARES).document(shareId)
 
     private fun shareDocument(
         ownerUid: String,
@@ -149,6 +266,31 @@ class ReminderSharingRepositoryImpl @Inject constructor(
         recipientUid: String,
     ): DocumentReference = firestore.collection(FirestoreSchema.REMINDER_SHARES)
         .document("${ownerUid}_${reminderId}_$recipientUid")
+
+    private suspend fun <T> runShareOp(block: suspend () -> T): T = try {
+        block()
+    } catch (exception: FriendException) {
+        throw exception
+    } catch (exception: Exception) {
+        logger.e(TAG, "Share op failed: ${exception::class.simpleName}: ${exception.message}", exception)
+        throw FriendException(
+            when {
+                exception is IOException -> FriendError.NETWORK
+                exception is com.google.firebase.firestore.FirebaseFirestoreException &&
+                    exception.code ==
+                    com.google.firebase.firestore.FirebaseFirestoreException.Code.UNAVAILABLE ->
+                    FriendError.NETWORK
+
+                exception is com.google.firebase.firestore.FirebaseFirestoreException &&
+                    exception.code ==
+                    com.google.firebase.firestore.FirebaseFirestoreException.Code.PERMISSION_DENIED ->
+                    FriendError.PERMISSION
+
+                else -> FriendError.UNKNOWN
+            },
+            exception,
+        )
+    }
 
     private companion object {
         const val TAG = "ReminderSharing"

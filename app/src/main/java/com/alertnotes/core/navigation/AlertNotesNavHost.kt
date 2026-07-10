@@ -29,6 +29,8 @@ import com.alertnotes.features.friends.FriendsScreen
 import com.alertnotes.features.friends.PublicProfileScreen
 import com.alertnotes.features.settings.ReliabilityScreen
 import com.alertnotes.features.settings.SettingsScreen
+import com.alertnotes.features.sharing.ShareReminderScreen
+import com.alertnotes.features.sharing.SharedRemindersScreen
 
 private const val TRANSITION_MILLIS = 260
 
@@ -115,6 +117,8 @@ fun AlertNotesNavHost(
                 onOpenHistory = { navController.navigate(HistoryRoute) },
                 onOpenSettings = { navController.navigate(SettingsRoute) },
                 onOpenDiagnostics = { navController.navigate(ReliabilityRoute) },
+                onOpenShareReminder = { navController.navigate(ShareReminderRoute) },
+                onOpenSharedReminders = { navController.navigate(SharedRemindersRoute) },
                 onExit = onExit,
             )
         }
@@ -143,6 +147,12 @@ fun AlertNotesNavHost(
         }
         composable<ReliabilityRoute> {
             ReliabilityScreen(onNavigateBack = navController::navigateUp)
+        }
+        composable<ShareReminderRoute> {
+            ShareReminderScreen(onNavigateBack = navController::navigateUp)
+        }
+        composable<SharedRemindersRoute> {
+            SharedRemindersScreen(onNavigateBack = navController::navigateUp)
         }
         composable<HistoryRoute> {
             HistoryScreen(onNavigateBack = navController::navigateUp)
