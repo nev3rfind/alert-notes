@@ -640,6 +640,9 @@ private fun SystemBubble(kind: SystemMessageKind, mine: Boolean) {
                         SystemMessageKind.REMINDER_SHARED ->
                             if (mine) R.string.chat_system_shared_mine else R.string.chat_system_shared_theirs
 
+                        SystemMessageKind.REMINDER_ASSIGNED ->
+                            if (mine) R.string.chat_system_assigned_mine else R.string.chat_system_assigned_theirs
+
                         SystemMessageKind.REMINDER_ACCEPTED -> R.string.chat_system_accepted
                         SystemMessageKind.REMINDER_REJECTED -> R.string.chat_system_rejected
                         SystemMessageKind.NONE -> R.string.chat_system_generic

@@ -9,7 +9,15 @@ enum class MessageStatus { SENT, DELIVERED, READ }
 enum class MessageType { TEXT, SYSTEM }
 
 /** What a SYSTEM message narrates; text is resolved from resources. */
-enum class SystemMessageKind { REMINDER_SHARED, REMINDER_ACCEPTED, REMINDER_REJECTED, NONE }
+enum class SystemMessageKind {
+    REMINDER_SHARED,
+
+    /** Recipients-only assignment: the sender never receives the alert. */
+    REMINDER_ASSIGNED,
+    REMINDER_ACCEPTED,
+    REMINDER_REJECTED,
+    NONE,
+}
 
 data class ChatMessage(
     val id: String,

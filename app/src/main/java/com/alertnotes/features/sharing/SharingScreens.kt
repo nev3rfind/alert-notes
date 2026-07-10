@@ -1,6 +1,5 @@
 package com.alertnotes.features.sharing
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,6 +15,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.RadioButtonUnchecked
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
@@ -27,12 +27,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -46,12 +45,12 @@ import com.alertnotes.core.ui.components.AppTopBar
 import com.alertnotes.core.ui.components.PrimaryButton
 import com.alertnotes.core.ui.components.SectionCard
 import com.alertnotes.core.ui.theme.spacing
-import com.alertnotes.domain.model.FamilyMember
 import com.alertnotes.domain.model.FriendError
 import com.alertnotes.domain.model.FriendException
-import com.alertnotes.domain.model.FriendUser
+import com.alertnotes.domain.model.PublicProfile
 import com.alertnotes.domain.model.Reminder
 import com.alertnotes.domain.model.RelationshipType
+import com.alertnotes.domain.model.ReminderOwnership
 import com.alertnotes.domain.model.ReminderShareWithProfile
 import com.alertnotes.domain.model.ShareStatus
 import com.alertnotes.domain.repository.FriendRepository
@@ -66,11 +65,16 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-/** Who a reminder is for; drives the explanatory copy and recipient list. */
-enum class SharingMode { ONLY_ME, FRIEND, FAMILY }
+/** One selectable person in the sharing wizard, relationship included. */
+data class RecipientOption(
+    val uid: String,
+    val profile: PublicProfile,
+    val isFamily: Boolean,
+)
 
 @HiltViewModel
 class ShareReminderViewModel @Inject constructor(
@@ -82,28 +86,33 @@ class ShareReminderViewModel @Inject constructor(
     val reminders: StateFlow<List<Reminder>> = reminderRepository.observeReminders()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    val friends: StateFlow<List<FriendUser>> = friendRepository.friends
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-
-    val family: StateFlow<List<FamilyMember>> = friendRepository.family
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    /** Family first (auto-delivery capable), then plain friends — one list. */
+    val recipients: StateFlow<List<RecipientOption>> = combine(
+        friendRepository.friends,
+        friendRepository.family,
+    ) { friends, family ->
+        val familyUids = family.map { it.uid }.toSet()
+        family.map { RecipientOption(it.uid, it.profile, isFamily = true) } +
+            friends.filter { it.uid !in familyUids }
+                .map { RecipientOption(it.uid, it.profile, isFamily = false) }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private val _isSending = MutableStateFlow(false)
     val isSending: StateFlow<Boolean> = _isSending.asStateFlow()
 
-    private val _sent = MutableStateFlow(false)
-    val sent: StateFlow<Boolean> = _sent.asStateFlow()
+    private val _sent = MutableStateFlow<ReminderOwnership?>(null)
+    val sent: StateFlow<ReminderOwnership?> = _sent.asStateFlow()
 
     private val _notice = MutableStateFlow<FriendError?>(null)
     val notice: StateFlow<FriendError?> = _notice.asStateFlow()
 
-    fun send(reminder: Reminder, recipientUids: List<String>) {
+    fun send(reminder: Reminder, recipientUids: List<String>, ownership: ReminderOwnership) {
         if (_isSending.value || recipientUids.isEmpty()) return
         _isSending.value = true
         viewModelScope.launch {
             try {
-                sharingRepository.shareReminder(reminder, recipientUids)
-                _sent.value = true
+                sharingRepository.shareReminder(reminder, recipientUids, ownership)
+                _sent.value = ownership
             } catch (exception: FriendException) {
                 _notice.value = exception.error
             } finally {
@@ -118,10 +127,11 @@ class ShareReminderViewModel @Inject constructor(
 }
 
 /**
- * The sharing flow: pick one of your reminders, choose who it's for (with
- * plain-language explanations of each mode), select recipients, review, and
- * send. Deliberately a standalone flow rather than a rebuild of the
- * production reminder editor — the offline engine stays untouched.
+ * The sharing wizard: pick one of your reminders, select recipients (friends
+ * and family in one list), choose who the reminder belongs to — with a live
+ * preview of exactly what each ownership mode means — then review and send.
+ * Deliberately a standalone flow rather than a rebuild of the production
+ * reminder editor — the offline engine stays untouched.
  */
 @Composable
 fun ShareReminderScreen(
@@ -129,17 +139,17 @@ fun ShareReminderScreen(
     viewModel: ShareReminderViewModel = hiltViewModel(),
 ) {
     val reminders by viewModel.reminders.collectAsStateWithLifecycle()
-    val friends by viewModel.friends.collectAsStateWithLifecycle()
-    val family by viewModel.family.collectAsStateWithLifecycle()
+    val recipients by viewModel.recipients.collectAsStateWithLifecycle()
     val isSending by viewModel.isSending.collectAsStateWithLifecycle()
     val sent by viewModel.sent.collectAsStateWithLifecycle()
     val notice by viewModel.notice.collectAsStateWithLifecycle()
 
     var selectedReminderId by rememberSaveable { mutableStateOf<Long?>(null) }
-    var mode by rememberSaveable { mutableStateOf(SharingMode.ONLY_ME) }
     var selectedUids by rememberSaveable { mutableStateOf(setOf<String>()) }
+    var ownership by rememberSaveable { mutableStateOf(ReminderOwnership.ME_AND_RECIPIENTS) }
 
     val selectedReminder = reminders.firstOrNull { it.id == selectedReminderId }
+    val sendsToOthers = ownership != ReminderOwnership.ONLY_ME
 
     Scaffold(
         topBar = {
@@ -186,81 +196,71 @@ fun ShareReminderScreen(
                     }
                 }
                 item {
-                    SectionCard(title = stringResource(R.string.sharing_step_mode)) {
-                        ModeRow(
-                            title = stringResource(R.string.sharing_mode_only_me),
-                            explanation = stringResource(R.string.sharing_mode_only_me_hint),
-                            selected = mode == SharingMode.ONLY_ME,
-                        ) {
-                            mode = SharingMode.ONLY_ME
-                            selectedUids = emptySet()
-                        }
-                        ModeRow(
-                            title = stringResource(R.string.sharing_mode_friend),
-                            explanation = stringResource(R.string.sharing_mode_friend_hint),
-                            selected = mode == SharingMode.FRIEND,
-                        ) {
-                            mode = SharingMode.FRIEND
-                            selectedUids = emptySet()
-                        }
-                        ModeRow(
-                            title = stringResource(R.string.sharing_mode_family),
-                            explanation = stringResource(R.string.sharing_mode_family_hint),
-                            selected = mode == SharingMode.FAMILY,
-                        ) {
-                            mode = SharingMode.FAMILY
-                            selectedUids = emptySet()
-                        }
-                    }
-                }
-                if (mode != SharingMode.ONLY_ME) {
-                    item {
-                        SectionCard(title = stringResource(R.string.sharing_step_recipients)) {
-                            val people: List<Pair<String, com.alertnotes.domain.model.PublicProfile>> =
-                                if (mode == SharingMode.FAMILY) {
-                                    family.map { it.uid to it.profile }
-                                } else {
-                                    friends.map { it.uid to it.profile }
-                                }
-                            if (people.isEmpty()) {
-                                Text(
-                                    text = stringResource(R.string.sharing_no_recipients),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(MaterialTheme.spacing.large),
-                                )
-                            } else {
-                                people.forEach { (uid, profile) ->
-                                    val isSelected = uid in selectedUids
-                                    PersonRow(
-                                        profile = profile,
-                                        badge = if (mode == SharingMode.FAMILY) {
-                                            stringResource(R.string.family_state_member)
+                    SectionCard(title = stringResource(R.string.sharing_step_recipients)) {
+                        if (recipients.isEmpty()) {
+                            Text(
+                                text = stringResource(R.string.sharing_no_recipients),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(MaterialTheme.spacing.large),
+                            )
+                        } else {
+                            recipients.forEach { option ->
+                                val isSelected = option.uid in selectedUids
+                                PersonRow(
+                                    profile = option.profile,
+                                    badge = if (option.isFamily) {
+                                        stringResource(R.string.family_state_member)
+                                    } else {
+                                        stringResource(R.string.friends_state_friends)
+                                    },
+                                    onClick = {
+                                        selectedUids =
+                                            if (isSelected) selectedUids - option.uid else selectedUids + option.uid
+                                    },
+                                ) {
+                                    Icon(
+                                        imageVector = if (isSelected) {
+                                            Icons.Outlined.CheckCircle
                                         } else {
-                                            stringResource(R.string.friends_state_friends)
+                                            Icons.Outlined.RadioButtonUnchecked
                                         },
-                                        onClick = {
-                                            selectedUids =
-                                                if (isSelected) selectedUids - uid else selectedUids + uid
+                                        contentDescription = null,
+                                        tint = if (isSelected) {
+                                            MaterialTheme.colorScheme.primary
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
                                         },
-                                    ) {
-                                        Icon(
-                                            imageVector = if (isSelected) {
-                                                Icons.Outlined.CheckCircle
-                                            } else {
-                                                Icons.Outlined.RadioButtonUnchecked
-                                            },
-                                            contentDescription = null,
-                                            tint = if (isSelected) {
-                                                MaterialTheme.colorScheme.primary
-                                            } else {
-                                                MaterialTheme.colorScheme.onSurfaceVariant
-                                            },
-                                        )
-                                    }
+                                    )
                                 }
                             }
                         }
+                    }
+                }
+                item {
+                    SectionCard(title = stringResource(R.string.sharing_step_ownership)) {
+                        SelectableRow(
+                            title = stringResource(R.string.sharing_mode_only_me),
+                            subtitle = stringResource(R.string.sharing_ownership_only_me_hint),
+                            selected = ownership == ReminderOwnership.ONLY_ME,
+                            onClick = { ownership = ReminderOwnership.ONLY_ME },
+                        )
+                        SelectableRow(
+                            title = stringResource(R.string.sharing_ownership_me_and),
+                            subtitle = stringResource(R.string.sharing_ownership_me_and_hint),
+                            selected = ownership == ReminderOwnership.ME_AND_RECIPIENTS,
+                            onClick = { ownership = ReminderOwnership.ME_AND_RECIPIENTS },
+                        )
+                        SelectableRow(
+                            title = stringResource(R.string.sharing_ownership_recipients_only),
+                            subtitle = stringResource(R.string.sharing_ownership_recipients_only_hint),
+                            selected = ownership == ReminderOwnership.RECIPIENTS_ONLY,
+                            onClick = { ownership = ReminderOwnership.RECIPIENTS_ONLY },
+                        )
+                        OwnershipPreview(
+                            ownership = ownership,
+                            recipientCount = selectedUids.size,
+                        )
                     }
                 }
                 item {
@@ -278,37 +278,27 @@ fun ShareReminderScreen(
                                     ?: stringResource(R.string.editor_status_none),
                             )
                             ReviewLine(
-                                label = stringResource(R.string.sharing_step_mode),
-                                value = stringResource(
-                                    when (mode) {
-                                        SharingMode.ONLY_ME -> R.string.sharing_mode_only_me
-                                        SharingMode.FRIEND -> R.string.sharing_mode_friend
-                                        SharingMode.FAMILY -> R.string.sharing_mode_family
-                                    },
-                                ),
+                                label = stringResource(R.string.sharing_step_ownership),
+                                value = ownership.label(),
                             )
                             ReviewLine(
                                 label = stringResource(R.string.sharing_step_recipients),
-                                value = selectedUids.size.toString(),
+                                value = if (sendsToOthers) selectedUids.size.toString() else "0",
                             )
                             PrimaryButton(
                                 text = stringResource(
-                                    if (mode == SharingMode.ONLY_ME) {
-                                        R.string.sharing_done_local
-                                    } else {
-                                        R.string.sharing_send
-                                    },
+                                    if (sendsToOthers) R.string.sharing_send else R.string.sharing_done_local,
                                 ),
                                 onClick = {
-                                    if (mode == SharingMode.ONLY_ME) {
+                                    if (!sendsToOthers) {
                                         onNavigateBack()
                                     } else {
                                         selectedReminder?.let {
-                                            viewModel.send(it, selectedUids.toList())
+                                            viewModel.send(it, selectedUids.toList(), ownership)
                                         }
                                     }
                                 },
-                                enabled = mode == SharingMode.ONLY_ME ||
+                                enabled = !sendsToOthers ||
                                     (selectedReminder != null && selectedUids.isNotEmpty()),
                                 loading = isSending,
                                 modifier = Modifier
@@ -323,7 +313,7 @@ fun ShareReminderScreen(
     }
 
     notice?.let { FriendNoticeDialog(error = it, onDismiss = viewModel::dismissNotice) }
-    if (sent) {
+    sent?.let { sentOwnership ->
         AlertDialog(
             onDismissRequest = onNavigateBack,
             shape = MaterialTheme.shapes.extraLarge,
@@ -335,13 +325,64 @@ fun ShareReminderScreen(
                 )
             },
             title = { Text(text = stringResource(R.string.sharing_sent_title)) },
-            text = { Text(text = stringResource(R.string.sharing_sent_message)) },
+            text = {
+                Text(
+                    text = stringResource(
+                        if (sentOwnership == ReminderOwnership.RECIPIENTS_ONLY) {
+                            R.string.sharing_sent_assigned_message
+                        } else {
+                            R.string.sharing_sent_message
+                        },
+                    ),
+                )
+            },
             confirmButton = {
                 TextButton(onClick = onNavigateBack) {
                     Text(text = stringResource(R.string.action_done))
                 }
             },
         )
+    }
+}
+
+/** Plain-language live preview of what the chosen ownership mode will do. */
+@Composable
+private fun OwnershipPreview(ownership: ReminderOwnership, recipientCount: Int) {
+    Surface(
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(
+                horizontal = MaterialTheme.spacing.large,
+                vertical = MaterialTheme.spacing.small,
+            ),
+    ) {
+        Row(
+            modifier = Modifier.padding(MaterialTheme.spacing.large),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.medium),
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.Info,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+            )
+            Text(
+                text = when (ownership) {
+                    ReminderOwnership.ONLY_ME ->
+                        stringResource(R.string.sharing_preview_only_me)
+
+                    ReminderOwnership.ME_AND_RECIPIENTS ->
+                        stringResource(R.string.sharing_preview_me_and, recipientCount)
+
+                    ReminderOwnership.RECIPIENTS_ONLY ->
+                        stringResource(R.string.sharing_preview_recipients_only, recipientCount)
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
     }
 }
 
@@ -367,6 +408,16 @@ class SharedRemindersViewModel @Inject constructor(
 
     fun cancel(shareId: String) = act { sharingRepository.cancelShare(shareId) }
 
+    fun acceptUpdate(item: ReminderShareWithProfile) = act {
+        sharingRepository.acceptShareUpdate(item.share)
+    }
+
+    fun declineUpdate(item: ReminderShareWithProfile) = act {
+        sharingRepository.declineShareUpdate(item.share)
+    }
+
+    fun deleteOwned(reminderId: Long) = act { sharingRepository.deleteOwnedReminder(reminderId) }
+
     fun dismissNotice() {
         _notice.value = null
     }
@@ -384,20 +435,27 @@ class SharedRemindersViewModel @Inject constructor(
 
 /**
  * The sharing dashboard: incoming reminder invitations (accept/decline with
- * preview) plus everything the user has sent, with live status chips and
- * filters.
+ * preview), pending content updates awaiting approval, and everything the
+ * user has sent — owner, recipient, ownership, sharing mode, live status,
+ * and full owner control (edit/cancel/delete) over recipients-only
+ * assignments.
  */
 @Composable
 fun SharedRemindersScreen(
     onNavigateBack: () -> Unit,
+    onOpenEditor: (Long) -> Unit,
     viewModel: SharedRemindersViewModel = hiltViewModel(),
 ) {
     val incoming by viewModel.incoming.collectAsStateWithLifecycle()
     val outgoing by viewModel.outgoing.collectAsStateWithLifecycle()
     val notice by viewModel.notice.collectAsStateWithLifecycle()
     var filter by rememberSaveable { mutableStateOf<ShareStatus?>(null) }
+    var pendingDeleteId by rememberSaveable { mutableStateOf<Long?>(null) }
 
     val pendingIncoming = incoming.filter { it.share.status == ShareStatus.PENDING }
+    val pendingUpdates = incoming.filter {
+        it.share.updateRequested && it.share.hasPendingUpdate
+    }
     val filteredOutgoing = outgoing.filter { filter == null || it.share.status == filter }
 
     Scaffold(
@@ -425,6 +483,19 @@ fun SharedRemindersScreen(
                     item {
                         SectionCard(title = stringResource(R.string.sharing_incoming_title)) {
                             pendingIncoming.forEach { item ->
+                                IncomingShareCard(
+                                    item = item,
+                                    onAccept = { viewModel.accept(item) },
+                                    onDecline = { viewModel.decline(item.share.id) },
+                                )
+                            }
+                        }
+                    }
+                }
+                if (pendingUpdates.isNotEmpty()) {
+                    item {
+                        SectionCard(title = stringResource(R.string.sharing_update_incoming_title)) {
+                            pendingUpdates.forEach { item ->
                                 Column(
                                     modifier = Modifier.padding(
                                         horizontal = MaterialTheme.spacing.large,
@@ -433,17 +504,11 @@ fun SharedRemindersScreen(
                                 ) {
                                     Text(
                                         text = stringResource(
-                                            R.string.sharing_incoming_from,
+                                            R.string.sharing_update_from,
                                             item.profile.displayName,
+                                            item.share.title,
                                         ),
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                    Text(
-                                        text = item.share.title,
-                                        style = MaterialTheme.typography.titleMedium,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
+                                        style = MaterialTheme.typography.bodyMedium,
                                     )
                                     if (item.share.scheduleSummary.isNotBlank()) {
                                         Text(
@@ -453,12 +518,12 @@ fun SharedRemindersScreen(
                                         )
                                     }
                                     Row {
-                                        TextButton(onClick = { viewModel.accept(item) }) {
-                                            Text(text = stringResource(R.string.friends_accept))
+                                        TextButton(onClick = { viewModel.acceptUpdate(item) }) {
+                                            Text(text = stringResource(R.string.sharing_update_apply))
                                         }
-                                        TextButton(onClick = { viewModel.decline(item.share.id) }) {
+                                        TextButton(onClick = { viewModel.declineUpdate(item) }) {
                                             Text(
-                                                text = stringResource(R.string.friends_reject),
+                                                text = stringResource(R.string.sharing_update_keep),
                                                 color = MaterialTheme.colorScheme.error,
                                             )
                                         }
@@ -483,6 +548,7 @@ fun SharedRemindersScreen(
                         listOf(
                             ShareStatus.PENDING,
                             ShareStatus.SCHEDULED,
+                            ShareStatus.TRIGGERED,
                             ShareStatus.COMPLETED,
                             ShareStatus.REJECTED,
                         ).forEach { status ->
@@ -505,67 +571,12 @@ fun SharedRemindersScreen(
                             )
                         } else {
                             filteredOutgoing.forEach { item ->
-                                Column(
-                                    modifier = Modifier.padding(
-                                        horizontal = MaterialTheme.spacing.large,
-                                        vertical = MaterialTheme.spacing.small,
-                                    ),
-                                ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(
-                                            text = item.share.title,
-                                            style = MaterialTheme.typography.titleSmall,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                            modifier = Modifier.weight(1f),
-                                        )
-                                        StatusChip(status = item.share.status)
-                                    }
-                                    Text(
-                                        text = stringResource(
-                                            R.string.sharing_outgoing_to,
-                                            item.profile.displayName,
-                                        ) + " · " + item.share.relationship.name
-                                            .lowercase()
-                                            .replaceFirstChar { it.uppercase() },
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                    val timeline = buildList {
-                                        item.share.createdAt?.let {
-                                            add(
-                                                stringResource(R.string.sharing_time_created) +
-                                                    " " + it.toDisplayDateTime(ZoneId.systemDefault()),
-                                            )
-                                        }
-                                        item.share.respondedAt?.let {
-                                            add(
-                                                stringResource(R.string.sharing_time_responded) +
-                                                    " " + it.toDisplayDateTime(ZoneId.systemDefault()),
-                                            )
-                                        }
-                                        item.share.lastSyncAt?.let {
-                                            add(
-                                                stringResource(R.string.sharing_time_sync) +
-                                                    " " + it.toDisplayDateTime(ZoneId.systemDefault()),
-                                            )
-                                        }
-                                    }
-                                    if (timeline.isNotEmpty()) {
-                                        Text(
-                                            text = timeline.joinToString(" · "),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                    }
-                                    if (item.share.status == ShareStatus.PENDING ||
-                                        item.share.status == ShareStatus.DELIVERED
-                                    ) {
-                                        TextButton(onClick = { viewModel.cancel(item.share.id) }) {
-                                            Text(text = stringResource(R.string.friends_cancel_request))
-                                        }
-                                    }
-                                }
+                                OutgoingShareCard(
+                                    item = item,
+                                    onCancel = { viewModel.cancel(item.share.id) },
+                                    onEdit = { onOpenEditor(item.share.reminderId) },
+                                    onDelete = { pendingDeleteId = item.share.reminderId },
+                                )
                             }
                         }
                     }
@@ -575,6 +586,198 @@ fun SharedRemindersScreen(
     }
 
     notice?.let { FriendNoticeDialog(error = it, onDismiss = viewModel::dismissNotice) }
+    pendingDeleteId?.let { reminderId ->
+        AlertDialog(
+            onDismissRequest = { pendingDeleteId = null },
+            shape = MaterialTheme.shapes.extraLarge,
+            title = { Text(text = stringResource(R.string.sharing_delete_confirm_title)) },
+            text = { Text(text = stringResource(R.string.sharing_delete_confirm_message)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.deleteOwned(reminderId)
+                        pendingDeleteId = null
+                    },
+                ) {
+                    Text(
+                        text = stringResource(R.string.sharing_delete),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteId = null }) {
+                    Text(text = stringResource(R.string.action_cancel))
+                }
+            },
+        )
+    }
+}
+
+/** Incoming invitation with preview; flags recipients-only assignments. */
+@Composable
+private fun IncomingShareCard(
+    item: ReminderShareWithProfile,
+    onAccept: () -> Unit,
+    onDecline: () -> Unit,
+) {
+    Column(
+        modifier = Modifier.padding(
+            horizontal = MaterialTheme.spacing.large,
+            vertical = MaterialTheme.spacing.small,
+        ),
+    ) {
+        Text(
+            text = stringResource(R.string.sharing_incoming_from, item.profile.displayName),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = item.share.title,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            if (item.share.ownership == ReminderOwnership.RECIPIENTS_ONLY) {
+                OwnershipChip(ownership = item.share.ownership)
+            }
+        }
+        if (item.share.scheduleSummary.isNotBlank()) {
+            Text(
+                text = item.share.scheduleSummary,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (item.share.ownership == ReminderOwnership.RECIPIENTS_ONLY) {
+            Text(
+                text = stringResource(R.string.sharing_assigned_badge),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+        Row {
+            TextButton(onClick = onAccept) {
+                Text(text = stringResource(R.string.friends_accept))
+            }
+            TextButton(onClick = onDecline) {
+                Text(
+                    text = stringResource(R.string.friends_reject),
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * One sent share: owner, recipient, ownership, sharing mode, live status,
+ * timeline, and — for recipients-only assignments — full owner control.
+ */
+@Composable
+private fun OutgoingShareCard(
+    item: ReminderShareWithProfile,
+    onCancel: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    val share = item.share
+    Column(
+        modifier = Modifier.padding(
+            horizontal = MaterialTheme.spacing.large,
+            vertical = MaterialTheme.spacing.small,
+        ),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
+        ) {
+            Text(
+                text = share.title,
+                style = MaterialTheme.typography.titleSmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            OwnershipChip(ownership = share.ownership)
+            StatusChip(status = share.status)
+        }
+        ReviewLine(
+            label = stringResource(R.string.sharing_detail_owner),
+            value = stringResource(R.string.sharing_owner_you),
+        )
+        ReviewLine(
+            label = stringResource(R.string.sharing_detail_recipient),
+            value = item.profile.displayName,
+        )
+        ReviewLine(
+            label = stringResource(R.string.sharing_detail_sharing_mode),
+            value = share.relationship.label() + " · " + stringResource(
+                if (share.approvalRequired) {
+                    R.string.sharing_delivery_approval
+                } else {
+                    R.string.sharing_delivery_auto
+                },
+            ),
+        )
+        if (share.updateRequested && share.hasPendingUpdate) {
+            Text(
+                text = stringResource(R.string.sharing_update_pending_owner),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.tertiary,
+            )
+        }
+        val timeline = buildList {
+            share.createdAt?.let {
+                add(
+                    stringResource(R.string.sharing_time_created) +
+                        " " + it.toDisplayDateTime(ZoneId.systemDefault()),
+                )
+            }
+            share.respondedAt?.let {
+                add(
+                    stringResource(R.string.sharing_time_responded) +
+                        " " + it.toDisplayDateTime(ZoneId.systemDefault()),
+                )
+            }
+            share.lastFiredAt?.let {
+                add(
+                    stringResource(R.string.sharing_time_fired) +
+                        " " + it.toDisplayDateTime(ZoneId.systemDefault()),
+                )
+            }
+        }
+        if (timeline.isNotEmpty()) {
+            Text(
+                text = timeline.joinToString(" · "),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Row {
+            if (share.status == ShareStatus.PENDING || share.status == ShareStatus.DELIVERED) {
+                TextButton(onClick = onCancel) {
+                    Text(text = stringResource(R.string.friends_cancel_request))
+                }
+            }
+            if (share.ownership == ReminderOwnership.RECIPIENTS_ONLY &&
+                share.status != ShareStatus.CANCELLED &&
+                share.status != ShareStatus.REJECTED
+            ) {
+                TextButton(onClick = onEdit) {
+                    Text(text = stringResource(R.string.sharing_edit))
+                }
+                TextButton(onClick = onDelete) {
+                    Text(
+                        text = stringResource(R.string.sharing_delete),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+        }
+    }
 }
 
 // region shared pieces
@@ -648,16 +851,6 @@ private fun ReviewLine(label: String, value: String) {
 }
 
 @Composable
-private fun ModeRow(
-    title: String,
-    explanation: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    SelectableRow(title = title, subtitle = explanation, selected = selected, onClick = onClick)
-}
-
-@Composable
 internal fun StatusChip(status: ShareStatus) {
     val (container, content) = when (status) {
         ShareStatus.PENDING, ShareStatus.DELIVERED ->
@@ -684,6 +877,41 @@ internal fun StatusChip(status: ShareStatus) {
         )
     }
 }
+
+@Composable
+private fun OwnershipChip(ownership: ReminderOwnership) {
+    Surface(
+        shape = MaterialTheme.shapes.extraLarge,
+        color = MaterialTheme.colorScheme.secondaryContainer,
+    ) {
+        Text(
+            text = ownership.label(),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSecondaryContainer,
+            modifier = Modifier.padding(
+                horizontal = MaterialTheme.spacing.small,
+                vertical = MaterialTheme.spacing.extraSmall,
+            ),
+        )
+    }
+}
+
+@Composable
+private fun ReminderOwnership.label(): String = stringResource(
+    when (this) {
+        ReminderOwnership.ONLY_ME -> R.string.sharing_mode_only_me
+        ReminderOwnership.ME_AND_RECIPIENTS -> R.string.sharing_ownership_chip_shared
+        ReminderOwnership.RECIPIENTS_ONLY -> R.string.sharing_ownership_chip_assigned
+    },
+)
+
+@Composable
+private fun RelationshipType.label(): String = stringResource(
+    when (this) {
+        RelationshipType.FAMILY -> R.string.family_state_member
+        RelationshipType.FRIEND -> R.string.friends_state_friends
+    },
+)
 
 @Composable
 private fun ShareStatus.label(): String = stringResource(

@@ -3,6 +3,19 @@ package com.alertnotes.domain.model
 import java.time.Instant
 
 /**
+ * Who a reminder alerts. ONLY_ME never leaves the device; ME_AND_RECIPIENTS
+ * keeps the creator's local alarm and additionally shares copies;
+ * RECIPIENTS_ONLY assigns the reminder away — the creator's master copy is
+ * archived (never scheduled, hidden from reminder lists) and lives on purely
+ * as the editable source of truth tracked from Shared Reminders.
+ */
+enum class ReminderOwnership {
+    ONLY_ME,
+    ME_AND_RECIPIENTS,
+    RECIPIENTS_ONLY,
+}
+
+/**
  * Lifecycle of a shared reminder. Unknown persisted values read as
  * CANCELLED so a malformed document can never demand action.
  */
@@ -20,10 +33,10 @@ enum class ShareStatus {
     /** Stored and scheduled on the recipient's device. */
     SCHEDULED,
 
-    /** The reminder fired on the recipient's device (future emission). */
+    /** The reminder fired on the recipient's device. */
     TRIGGERED,
 
-    /** The recipient completed/acknowledged it (future emission). */
+    /** A one-time reminder fired with no further occurrence left. */
     COMPLETED,
 
     /** Owner withdrew the share. */
@@ -37,6 +50,13 @@ enum class ShareStatus {
  * shared reminders, so the recipient can reconstruct it locally and keep it
  * working offline. [approvalRequired] captures the family-permission
  * decision at share time — the future Cloud Function's enforcement point.
+ *
+ * Edit propagation: every owner edit re-uploads [payload] and bumps
+ * [payloadVersion]; [contentUpdatedAt] mirrors the owner's local
+ * `updatedAt` so the sync sweep knows when the document is stale. Recipients
+ * record what they run as [appliedVersion] — a gap means an update exists,
+ * applied automatically under family auto-delivery or surfaced as an
+ * approval card when [updateRequested] is set.
  */
 data class ReminderShare(
     val id: String,
@@ -46,6 +66,7 @@ data class ReminderShare(
     val recipientUid: String,
     val relationship: RelationshipType,
     val approvalRequired: Boolean,
+    val ownership: ReminderOwnership,
     val status: ShareStatus,
     /** Title snapshot for previews before acceptance. */
     val title: String,
@@ -53,13 +74,27 @@ data class ReminderShare(
     val scheduleSummary: String,
     /** Full reminder body (backup-DTO JSON); empty only on legacy docs. */
     val payload: String,
+    /** Monotonic content revision; bumped on every owner edit push. */
+    val payloadVersion: Long,
+    /** Revision the recipient's device currently runs. */
+    val appliedVersion: Long,
+    /** True when an edit awaits the recipient's approval. */
+    val updateRequested: Boolean,
+    /** Owner's local `updatedAt` (epoch millis) captured at last push. */
+    val contentUpdatedAt: Long,
     /** Recipient's local reminder id once delivered; the dedup guard. */
     val recipientReminderId: Long?,
+    /** Most recent recipient-side fire mirrored back for owner tracking. */
+    val lastFiredAt: Instant?,
     val createdAt: Instant?,
     val respondedAt: Instant?,
     val scheduledAt: Instant?,
     val lastSyncAt: Instant?,
-)
+) {
+    /** An edit exists that the recipient's device has not applied yet. */
+    val hasPendingUpdate: Boolean
+        get() = recipientReminderId != null && payloadVersion > appliedVersion
+}
 
 /** A share joined with the other party's public profile, for lists. */
 data class ReminderShareWithProfile(

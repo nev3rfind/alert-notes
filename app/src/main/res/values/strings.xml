@@ -27,6 +27,39 @@
     <string name="nav_exit">Exit</string>
     <string name="nav_more">More</string>
 
+    <!-- Reminder ownership + sharing details -->
+    <string name="sharing_step_ownership">Reminder ownership</string>
+    <string name="sharing_ownership_only_me_hint">Keeps the reminder private to this device.</string>
+    <string name="sharing_ownership_me_and">Me + selected recipients</string>
+    <string name="sharing_ownership_me_and_hint">Alerts on your device and sends everyone selected their own copy.</string>
+    <string name="sharing_ownership_recipients_only">Selected recipients only</string>
+    <string name="sharing_ownership_recipients_only_hint">Assigns the reminder away — it never alerts on your device.</string>
+    <string name="sharing_preview_only_me">This reminder stays on this device. Nothing is uploaded or shared.</string>
+    <string name="sharing_preview_me_and">You\'ll be alerted as usual, and %1$d recipient(s) get their own copy — friends approve it first, family with auto-receive get it instantly.</string>
+    <string name="sharing_preview_recipients_only">You become the owner but are never alerted. %1$d recipient(s) receive the alert; you track, edit and cancel it from Shared Reminders.</string>
+    <string name="sharing_sent_assigned_message">The reminder was assigned to the selected recipients. It won\'t trigger on this device — follow its progress in Shared Reminders.</string>
+    <string name="sharing_assigned_badge">Assigned to you — the sender won\'t be alerted</string>
+    <string name="sharing_ownership_chip_shared">Me + recipients</string>
+    <string name="sharing_ownership_chip_assigned">Recipients only</string>
+    <string name="sharing_update_incoming_title">Reminder updates</string>
+    <string name="sharing_update_from">%1$s updated “%2$s”</string>
+    <string name="sharing_update_apply">Apply update</string>
+    <string name="sharing_update_keep">Keep mine</string>
+    <string name="sharing_update_pending_owner">Update awaiting the recipient\'s approval</string>
+    <string name="sharing_detail_owner">Owner</string>
+    <string name="sharing_detail_recipient">Recipient</string>
+    <string name="sharing_detail_sharing_mode">Sharing mode</string>
+    <string name="sharing_owner_you">You</string>
+    <string name="sharing_delivery_auto">Automatic delivery</string>
+    <string name="sharing_delivery_approval">Requires approval</string>
+    <string name="sharing_edit">Edit</string>
+    <string name="sharing_delete">Delete</string>
+    <string name="sharing_delete_confirm_title">Delete assigned reminder?</string>
+    <string name="sharing_delete_confirm_message">This cancels it for every recipient and deletes your master copy. This can\'t be undone.</string>
+    <string name="sharing_time_fired">Fired</string>
+    <string name="chat_system_assigned_mine">You assigned a reminder</string>
+    <string name="chat_system_assigned_theirs">This reminder was assigned to you</string>
+
     <!-- More hub -->
     <string name="more_section_app">App</string>
     <string name="more_calendar_subtitle">Month, week, and timeline views</string>

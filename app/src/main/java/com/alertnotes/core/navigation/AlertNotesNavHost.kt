@@ -162,7 +162,12 @@ fun AlertNotesNavHost(
             ShareReminderScreen(onNavigateBack = navController::navigateUp)
         }
         composable<SharedRemindersRoute> {
-            SharedRemindersScreen(onNavigateBack = navController::navigateUp)
+            SharedRemindersScreen(
+                onNavigateBack = navController::navigateUp,
+                onOpenEditor = { reminderId ->
+                    navController.navigate(ReminderEditorRoute(reminderId))
+                },
+            )
         }
         composable<InboxRoute> {
             InboxScreen(

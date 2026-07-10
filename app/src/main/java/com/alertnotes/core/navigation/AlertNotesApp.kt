@@ -64,9 +64,10 @@ fun AlertNotesApp(createReminderRequestId: Int = 0) {
     Row(modifier = Modifier.fillMaxSize()) {
         if (useNavigationRail) {
             AppNavigationRail(
-                destinations = TopLevelDestination.entries,
-                isSelected = { currentDestination.isDestinationSelected(it) },
+                destinations = RailDestination.entries,
+                isSelected = { currentDestination.isRouteSelected(it.route) },
                 onNavigate = { navController.navigateToTopLevel(it.route) },
+                onExit = onExit,
             )
         }
         Scaffold(
@@ -100,4 +101,7 @@ fun AlertNotesApp(createReminderRequestId: Int = 0) {
 }
 
 private fun NavDestination?.isDestinationSelected(destination: TopLevelDestination): Boolean =
-    this?.hierarchy?.any { it.hasRoute(destination.route::class) } == true
+    isRouteSelected(destination.route)
+
+private fun NavDestination?.isRouteSelected(route: Any): Boolean =
+    this?.hierarchy?.any { it.hasRoute(route::class) } == true
