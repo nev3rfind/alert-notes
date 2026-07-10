@@ -42,11 +42,14 @@ enum class FriendshipState {
     NONE,
 }
 
-/** Why a friend action was refused; mapped to friendly messages in the UI. */
+/** Why a relationship action was refused; mapped to friendly UI messages. */
 enum class FriendError {
     SELF_REQUEST,
     ALREADY_FRIENDS,
     ALREADY_PENDING,
+    /** Family invitations require an existing friendship. */
+    NOT_FRIENDS,
+    ALREADY_FAMILY,
     NETWORK,
     UNKNOWN,
 }

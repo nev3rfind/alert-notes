@@ -1,9 +1,14 @@
 package com.alertnotes.domain.repository
 
+import com.alertnotes.domain.model.FamilyInvitationWithProfile
+import com.alertnotes.domain.model.FamilyMember
+import com.alertnotes.domain.model.FamilyPermissions
+import com.alertnotes.domain.model.FamilyState
 import com.alertnotes.domain.model.FriendRequestWithProfile
 import com.alertnotes.domain.model.FriendUser
 import com.alertnotes.domain.model.FriendshipState
 import com.alertnotes.domain.model.PublicProfile
+import com.alertnotes.domain.model.PublicStatistics
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -43,4 +48,35 @@ interface FriendRepository {
     suspend fun cancelRequest(requestId: String)
 
     suspend fun removeFriend(friendUid: String)
+
+    // region Family
+
+    /** Family members with live profiles and their per-edge permissions. */
+    val family: Flow<List<FamilyMember>>
+
+    val incomingFamilyInvitations: Flow<List<FamilyInvitationWithProfile>>
+
+    val outgoingFamilyInvitations: Flow<List<FamilyInvitationWithProfile>>
+
+    /** Live family relationship with [uid]; drives profile/search badges. */
+    fun observeFamilyState(uid: String): Flow<FamilyState>
+
+    /** Another user's shareable counters for their public profile. */
+    suspend fun publicStatistics(uid: String): PublicStatistics
+
+    /** Only existing friends can be invited; optional personal [message]. */
+    suspend fun inviteToFamily(toUid: String, message: String)
+
+    suspend fun acceptFamilyInvitation(invitationId: String)
+
+    suspend fun declineFamilyInvitation(invitationId: String)
+
+    suspend fun cancelFamilyInvitation(invitationId: String)
+
+    suspend fun removeFamilyMember(memberUid: String)
+
+    /** Rewrites what [memberUid] may do toward the signed-in user. */
+    suspend fun setFamilyPermissions(memberUid: String, permissions: FamilyPermissions)
+
+    // endregion
 }

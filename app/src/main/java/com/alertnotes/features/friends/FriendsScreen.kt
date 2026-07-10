@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.PersonSearch
+import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -23,6 +24,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -44,6 +48,9 @@ import com.alertnotes.core.ui.components.AppTopBar
 import com.alertnotes.core.ui.components.SearchField
 import com.alertnotes.core.ui.theme.spacing
 import com.alertnotes.core.ui.components.SectionCard
+import com.alertnotes.domain.model.FamilyInvitationWithProfile
+import com.alertnotes.domain.model.FamilyMember
+import com.alertnotes.domain.model.FamilyPermissions
 import com.alertnotes.domain.model.FriendError
 import com.alertnotes.domain.model.FriendException
 import com.alertnotes.domain.model.FriendRequestWithProfile
@@ -90,6 +97,17 @@ class FriendsViewModel @Inject constructor(
     val outgoing: StateFlow<List<FriendRequestWithProfile>> = friendRepository.outgoingRequests
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    val family: StateFlow<List<FamilyMember>> = friendRepository.family
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val incomingFamily: StateFlow<List<FamilyInvitationWithProfile>> =
+        friendRepository.incomingFamilyInvitations
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val outgoingFamily: StateFlow<List<FamilyInvitationWithProfile>> =
+        friendRepository.outgoingFamilyInvitations
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     private val _notice = MutableStateFlow<FriendError?>(null)
     val notice: StateFlow<FriendError?> = _notice.asStateFlow()
 
@@ -104,6 +122,17 @@ class FriendsViewModel @Inject constructor(
     fun cancel(requestId: String) = act { friendRepository.cancelRequest(requestId) }
 
     fun removeFriend(uid: String) = act { friendRepository.removeFriend(uid) }
+
+    fun acceptFamily(id: String) = act { friendRepository.acceptFamilyInvitation(id) }
+
+    fun declineFamily(id: String) = act { friendRepository.declineFamilyInvitation(id) }
+
+    fun cancelFamily(id: String) = act { friendRepository.cancelFamilyInvitation(id) }
+
+    fun removeFamily(uid: String) = act { friendRepository.removeFamilyMember(uid) }
+
+    fun setFamilyPermissions(uid: String, permissions: FamilyPermissions) =
+        act { friendRepository.setFamilyPermissions(uid, permissions) }
 
     fun dismissNotice() {
         _notice.value = null
@@ -139,7 +168,27 @@ fun FriendsScreen(
     val friends by viewModel.friends.collectAsStateWithLifecycle()
     val incoming by viewModel.incoming.collectAsStateWithLifecycle()
     val outgoing by viewModel.outgoing.collectAsStateWithLifecycle()
+    val family by viewModel.family.collectAsStateWithLifecycle()
+    val incomingFamily by viewModel.incomingFamily.collectAsStateWithLifecycle()
+    val outgoingFamily by viewModel.outgoingFamily.collectAsStateWithLifecycle()
     val notice by viewModel.notice.collectAsStateWithLifecycle()
+
+    // Relationship badge for a search result, computed from the live lists.
+    val badgeFor: @Composable (String) -> String? = { uid ->
+        when {
+            family.any { it.uid == uid } -> stringResource(R.string.family_state_member)
+            friends.any { it.uid == uid } -> stringResource(R.string.friends_state_friends)
+            outgoing.any { it.request.toUid == uid } ->
+                stringResource(R.string.friends_state_request_sent)
+            incoming.any { it.request.fromUid == uid } ->
+                stringResource(R.string.friends_state_pending)
+            outgoingFamily.any { it.invitation.toUid == uid } ->
+                stringResource(R.string.family_state_invite_sent)
+            incomingFamily.any { it.invitation.fromUid == uid } ->
+                stringResource(R.string.family_state_invite_received)
+            else -> null
+        }
+    }
 
     Scaffold(
         topBar = { AppTopBar(title = stringResource(R.string.nav_friends)) },
@@ -184,6 +233,7 @@ fun FriendsScreen(
                                 else -> results.forEach { user ->
                                     PersonRow(
                                         profile = user.profile,
+                                        badge = badgeFor(user.uid),
                                         onClick = { onOpenUser(user.uid) },
                                     )
                                 }
@@ -258,6 +308,75 @@ fun FriendsScreen(
                         }
                     }
                 }
+                if (incomingFamily.isNotEmpty()) {
+                    item {
+                        SectionCard(title = stringResource(R.string.family_section_incoming)) {
+                            incomingFamily.forEach { item ->
+                                PersonRow(
+                                    profile = item.profile,
+                                    supportingOverride = item.invitation.message.ifBlank {
+                                        stringResource(R.string.family_invite_default)
+                                    },
+                                    onClick = { onOpenUser(item.invitation.fromUid) },
+                                ) {
+                                    TextButton(onClick = { viewModel.acceptFamily(item.invitation.id) }) {
+                                        Text(text = stringResource(R.string.family_accept))
+                                    }
+                                    TextButton(onClick = { viewModel.declineFamily(item.invitation.id) }) {
+                                        Text(
+                                            text = stringResource(R.string.family_decline),
+                                            color = MaterialTheme.colorScheme.error,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                if (outgoingFamily.isNotEmpty()) {
+                    item {
+                        SectionCard(title = stringResource(R.string.family_section_outgoing)) {
+                            outgoingFamily.forEach { item ->
+                                PersonRow(
+                                    profile = item.profile,
+                                    supportingOverride = stringResource(R.string.family_state_invite_sent),
+                                    onClick = { onOpenUser(item.invitation.toUid) },
+                                ) {
+                                    TextButton(onClick = { viewModel.cancelFamily(item.invitation.id) }) {
+                                        Text(text = stringResource(R.string.family_cancel_invitation))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                item {
+                    SectionCard(title = stringResource(R.string.family_section_my)) {
+                        if (family.isEmpty()) {
+                            EmptyHint(text = stringResource(R.string.family_list_empty))
+                        } else {
+                            family.forEach { member ->
+                                FamilyMemberRow(
+                                    member = member,
+                                    onOpen = { onOpenUser(member.uid) },
+                                    onRemove = { viewModel.removeFamily(member.uid) },
+                                    onPermissions = { permissions ->
+                                        viewModel.setFamilyPermissions(member.uid, permissions)
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
+                item {
+                    SectionCard(title = stringResource(R.string.family_section_settings)) {
+                        AppListItem(
+                            title = stringResource(R.string.family_settings_privacy),
+                            supportingText = stringResource(R.string.profile_coming_soon),
+                            leadingIcon = Icons.Outlined.Shield,
+                        )
+                    }
+                }
                 item {
                     SectionCard(title = stringResource(R.string.friends_section_blocked)) {
                         AppListItem(
@@ -283,6 +402,7 @@ internal fun PersonRow(
     onClick: () -> Unit,
     supportingOverride: String? = null,
     showLastSeen: Boolean = false,
+    badge: String? = null,
     trailing: (@Composable () -> Unit)? = null,
 ) {
     val supporting = supportingOverride ?: buildString {
@@ -337,6 +457,12 @@ internal fun PersonRow(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
+            if (badge != null) {
+                RelationshipBadge(
+                    text = badge,
+                    modifier = Modifier.padding(top = MaterialTheme.spacing.extraSmall),
+                )
+            }
         }
         if (trailing != null) {
             trailing()
@@ -345,6 +471,108 @@ internal fun PersonRow(
                 Text(text = stringResource(R.string.friends_view_profile))
             }
         }
+    }
+}
+
+@Composable
+private fun RelationshipBadge(text: String, modifier: Modifier = Modifier) {
+    androidx.compose.material3.Surface(
+        shape = MaterialTheme.shapes.extraLarge,
+        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+        modifier = modifier,
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(
+                horizontal = MaterialTheme.spacing.small,
+                vertical = MaterialTheme.spacing.extraSmall,
+            ),
+        )
+    }
+}
+
+/**
+ * A family member with an expandable permissions editor — the per-edge
+ * toggles that will later gate automatic reminder delivery, chat, and
+ * presence visibility.
+ */
+@Composable
+private fun FamilyMemberRow(
+    member: FamilyMember,
+    onOpen: () -> Unit,
+    onRemove: () -> Unit,
+    onPermissions: (FamilyPermissions) -> Unit,
+) {
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    Column(modifier = Modifier.fillMaxWidth()) {
+        PersonRow(
+            profile = member.profile,
+            showLastSeen = member.permissions.canViewLastSeen,
+            onClick = onOpen,
+        ) {
+            TextButton(onClick = { expanded = !expanded }) {
+                Text(
+                    text = stringResource(
+                        if (expanded) R.string.family_permissions_hide else R.string.family_permissions_edit,
+                    ),
+                )
+            }
+        }
+        if (expanded) {
+            val p = member.permissions
+            PermissionToggle(
+                label = stringResource(R.string.family_perm_auto_receive),
+                checked = p.autoReceiveReminders,
+            ) { onPermissions(p.copy(autoReceiveReminders = it)) }
+            PermissionToggle(
+                label = stringResource(R.string.family_perm_send_without_approval),
+                checked = p.canSendWithoutApproval,
+            ) { onPermissions(p.copy(canSendWithoutApproval = it)) }
+            PermissionToggle(
+                label = stringResource(R.string.family_perm_send_with_approval),
+                checked = p.canSendWithApproval,
+            ) { onPermissions(p.copy(canSendWithApproval = it)) }
+            PermissionToggle(
+                label = stringResource(R.string.family_perm_view_online),
+                checked = p.canViewOnlineStatus,
+            ) { onPermissions(p.copy(canViewOnlineStatus = it)) }
+            PermissionToggle(
+                label = stringResource(R.string.family_perm_view_last_seen),
+                checked = p.canViewLastSeen,
+            ) { onPermissions(p.copy(canViewLastSeen = it)) }
+            PermissionToggle(
+                label = stringResource(R.string.family_perm_start_chat),
+                checked = p.canStartChat,
+            ) { onPermissions(p.copy(canStartChat = it)) }
+            TextButton(
+                onClick = onRemove,
+                modifier = Modifier.padding(top = MaterialTheme.spacing.small),
+            ) {
+                Text(
+                    text = stringResource(R.string.family_remove),
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PermissionToggle(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = MaterialTheme.spacing.extraSmall),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.weight(1f),
+        )
+        androidx.compose.material3.Switch(checked = checked, onCheckedChange = onChange)
     }
 }
 
@@ -416,6 +644,8 @@ internal fun FriendNoticeDialog(error: FriendError, onDismiss: () -> Unit) {
                         FriendError.SELF_REQUEST -> R.string.friends_error_self
                         FriendError.ALREADY_FRIENDS -> R.string.friends_error_already_friends
                         FriendError.ALREADY_PENDING -> R.string.friends_error_pending
+                        FriendError.NOT_FRIENDS -> R.string.friends_error_not_friends
+                        FriendError.ALREADY_FAMILY -> R.string.friends_error_already_family
                         FriendError.NETWORK -> R.string.auth_error_network
                         FriendError.UNKNOWN -> R.string.auth_error_unknown
                     },

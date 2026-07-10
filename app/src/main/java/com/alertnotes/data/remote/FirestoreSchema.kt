@@ -65,4 +65,14 @@ object FirestoreSchema {
      * friends stay queryable and each edge carries its own metadata.
      */
     const val FRIENDS = "friends"
+
+    /** Family invitations, mirroring [FRIEND_REQUESTS]: `{from}_{to}` ids. */
+    const val FAMILY_INVITATIONS = "familyInvitations"
+
+    /**
+     * Family edges: `users/{uid}/family/{memberUid}`, each embedding the
+     * per-direction permission map — one-way and two-way relationships are
+     * just different values on the two sides.
+     */
+    const val FAMILY = "family"
 }

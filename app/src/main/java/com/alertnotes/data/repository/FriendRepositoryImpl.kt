@@ -2,6 +2,12 @@ package com.alertnotes.data.repository
 
 import com.alertnotes.core.util.AppLogger
 import com.alertnotes.data.remote.FirestoreSchema
+import com.alertnotes.domain.model.FamilyInvitation
+import com.alertnotes.domain.model.FamilyInvitationStatus
+import com.alertnotes.domain.model.FamilyInvitationWithProfile
+import com.alertnotes.domain.model.FamilyMember
+import com.alertnotes.domain.model.FamilyPermissions
+import com.alertnotes.domain.model.FamilyState
 import com.alertnotes.domain.model.FriendError
 import com.alertnotes.domain.model.FriendException
 import com.alertnotes.domain.model.FriendRequest
@@ -10,6 +16,7 @@ import com.alertnotes.domain.model.FriendRequestWithProfile
 import com.alertnotes.domain.model.FriendUser
 import com.alertnotes.domain.model.FriendshipState
 import com.alertnotes.domain.model.PublicProfile
+import com.alertnotes.domain.model.PublicStatistics
 import com.alertnotes.domain.repository.AuthRepository
 import com.alertnotes.domain.repository.FriendRepository
 import com.google.firebase.auth.FirebaseAuth
@@ -208,6 +215,255 @@ class FriendRepositoryImpl @Inject constructor(
         Unit
     }
 
+    // region Family
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override val family: Flow<List<FamilyMember>> = authRepository.authState
+        .flatMapLatest { user ->
+            if (user == null) flowOf(emptyList()) else familyEdges(user.uid)
+        }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override val incomingFamilyInvitations: Flow<List<FamilyInvitationWithProfile>> =
+        authRepository.authState.flatMapLatest { user ->
+            if (user == null) {
+                flowOf(emptyList())
+            } else {
+                pendingInvitations(field = "toUid", uid = user.uid, profileOf = { it.fromUid })
+            }
+        }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override val outgoingFamilyInvitations: Flow<List<FamilyInvitationWithProfile>> =
+        authRepository.authState.flatMapLatest { user ->
+            if (user == null) {
+                flowOf(emptyList())
+            } else {
+                pendingInvitations(field = "fromUid", uid = user.uid, profileOf = { it.toUid })
+            }
+        }
+
+    override fun observeFamilyState(uid: String): Flow<FamilyState> =
+        combine(family, incomingFamilyInvitations, outgoingFamilyInvitations) { members, incoming, outgoing ->
+            when {
+                members.any { it.uid == uid } -> FamilyState.FAMILY
+                outgoing.any { it.invitation.toUid == uid } -> FamilyState.INVITE_SENT
+                incoming.any { it.invitation.fromUid == uid } -> FamilyState.INVITE_RECEIVED
+                else -> FamilyState.NONE
+            }
+        }
+
+    override suspend fun publicStatistics(uid: String): PublicStatistics = runCatching {
+        val doc = statisticsDocument(uid).get().await()
+        PublicStatistics(
+            friendCount = doc.getLong("friendCount")?.toInt() ?: 0,
+            familyCount = doc.getLong("familyCount")?.toInt() ?: 0,
+        )
+    }.getOrDefault(PublicStatistics())
+
+    override suspend fun inviteToFamily(toUid: String, message: String) = runFriendOp {
+        val me = requireUid()
+        if (toUid == me) throw FriendException(FriendError.SELF_REQUEST)
+        // Family builds on friendship — the trust ladder is deliberate.
+        if (!friendEdge(me, toUid).get().await().exists()) {
+            throw FriendException(FriendError.NOT_FRIENDS)
+        }
+        if (familyEdge(me, toUid).get().await().exists()) {
+            throw FriendException(FriendError.ALREADY_FAMILY)
+        }
+        val mine = invitationDocument(me, toUid).get().await()
+        val theirs = invitationDocument(toUid, me).get().await()
+        if (mine.isPendingInvitation() || theirs.isPendingInvitation()) {
+            throw FriendException(FriendError.ALREADY_PENDING)
+        }
+        invitationDocument(me, toUid).set(
+            mapOf(
+                "fromUid" to me,
+                "toUid" to toUid,
+                "message" to message.trim(),
+                "status" to FamilyInvitationStatus.PENDING.name,
+                "createdAt" to FieldValue.serverTimestamp(),
+                "respondedAt" to null,
+            ),
+        ).await()
+        Unit
+    }
+
+    override suspend fun acceptFamilyInvitation(invitationId: String) = runFriendOp {
+        val me = requireUid()
+        val snapshot = firestore.collection(FirestoreSchema.FAMILY_INVITATIONS)
+            .document(invitationId).get().await()
+        val fromUid = snapshot.getString("fromUid")
+        if (!snapshot.isPendingInvitation() || snapshot.getString("toUid") != me || fromUid == null) {
+            throw FriendException(FriendError.UNKNOWN)
+        }
+        // Atomic: invitation closes and both permissioned edges plus both
+        // counters appear together — same invariant as friendship.
+        firestore.runBatch { batch ->
+            batch.update(
+                snapshot.reference,
+                mapOf(
+                    "status" to FamilyInvitationStatus.ACCEPTED.name,
+                    "respondedAt" to FieldValue.serverTimestamp(),
+                ),
+            )
+            val since = FieldValue.serverTimestamp()
+            val defaults = FamilyPermissions().toMap()
+            batch.set(
+                familyEdge(me, fromUid),
+                mapOf("uid" to fromUid, "since" to since, "permissions" to defaults),
+            )
+            batch.set(
+                familyEdge(fromUid, me),
+                mapOf("uid" to me, "since" to since, "permissions" to defaults),
+            )
+            batch.set(statisticsDocument(me), FAMILY_COUNT_UP, SetOptions.merge())
+            batch.set(statisticsDocument(fromUid), FAMILY_COUNT_UP, SetOptions.merge())
+        }.await()
+        Unit
+    }
+
+    override suspend fun declineFamilyInvitation(invitationId: String) =
+        closeInvitation(invitationId, FamilyInvitationStatus.DECLINED, mustBeField = "toUid")
+
+    override suspend fun cancelFamilyInvitation(invitationId: String) =
+        closeInvitation(invitationId, FamilyInvitationStatus.CANCELLED, mustBeField = "fromUid")
+
+    override suspend fun removeFamilyMember(memberUid: String) = runFriendOp {
+        val me = requireUid()
+        firestore.runBatch { batch ->
+            batch.delete(familyEdge(me, memberUid))
+            batch.delete(familyEdge(memberUid, me))
+            batch.set(statisticsDocument(me), FAMILY_COUNT_DOWN, SetOptions.merge())
+            batch.set(statisticsDocument(memberUid), FAMILY_COUNT_DOWN, SetOptions.merge())
+        }.await()
+        Unit
+    }
+
+    override suspend fun setFamilyPermissions(
+        memberUid: String,
+        permissions: FamilyPermissions,
+    ) = runFriendOp {
+        val me = requireUid()
+        familyEdge(me, memberUid)
+            .set(mapOf("permissions" to permissions.toMap()), SetOptions.merge())
+            .await()
+        Unit
+    }
+
+    private fun familyEdges(uid: String): Flow<List<FamilyMember>> = callbackFlow {
+        val registration = firestore.collection(FirestoreSchema.USERS).document(uid)
+            .collection(FirestoreSchema.FAMILY)
+            .addSnapshotListener { snapshot, error ->
+                trySend(if (error != null) emptyList() else snapshot?.documents.orEmpty())
+            }
+        awaitClose { registration.remove() }
+    }.map { documents ->
+        documents.sortedByDescending { it.instantField("since") ?: Instant.EPOCH }
+            .mapNotNull { doc ->
+                publicProfileOf(doc.id)?.let { profile ->
+                    FamilyMember(
+                        uid = doc.id,
+                        profile = profile,
+                        since = doc.instantField("since"),
+                        permissions = doc.get("permissions").toFamilyPermissions(),
+                    )
+                }
+            }
+    }
+
+    private fun pendingInvitations(
+        field: String,
+        uid: String,
+        profileOf: (FamilyInvitation) -> String,
+    ): Flow<List<FamilyInvitationWithProfile>> = callbackFlow {
+        val registration = firestore.collection(FirestoreSchema.FAMILY_INVITATIONS)
+            .whereEqualTo(field, uid)
+            .whereEqualTo("status", FamilyInvitationStatus.PENDING.name)
+            .addSnapshotListener { snapshot, error ->
+                trySend(if (error != null) emptyList() else snapshot?.documents.orEmpty())
+            }
+        awaitClose { registration.remove() }
+    }.map { documents ->
+        documents.map { it.toFamilyInvitation() }
+            .sortedByDescending { it.createdAt ?: Instant.EPOCH }
+            .mapNotNull { invitation ->
+                publicProfileOf(profileOf(invitation))
+                    ?.let { FamilyInvitationWithProfile(invitation, it) }
+            }
+    }
+
+    private suspend fun closeInvitation(
+        invitationId: String,
+        newStatus: FamilyInvitationStatus,
+        mustBeField: String,
+    ) = runFriendOp {
+        val me = requireUid()
+        val reference = firestore.collection(FirestoreSchema.FAMILY_INVITATIONS)
+            .document(invitationId)
+        val snapshot = reference.get().await()
+        if (!snapshot.isPendingInvitation() || snapshot.getString(mustBeField) != me) {
+            throw FriendException(FriendError.UNKNOWN)
+        }
+        reference.update(
+            mapOf(
+                "status" to newStatus.name,
+                "respondedAt" to FieldValue.serverTimestamp(),
+            ),
+        ).await()
+        Unit
+    }
+
+    private fun DocumentSnapshot.toFamilyInvitation(): FamilyInvitation = FamilyInvitation(
+        id = id,
+        fromUid = getString("fromUid").orEmpty(),
+        toUid = getString("toUid").orEmpty(),
+        message = getString("message").orEmpty(),
+        status = FamilyInvitationStatus.entries
+            .firstOrNull { it.name == getString("status") }
+            ?: FamilyInvitationStatus.EXPIRED,
+        createdAt = instantField("createdAt"),
+    )
+
+    private fun DocumentSnapshot.isPendingInvitation(): Boolean =
+        exists() && getString("status") == FamilyInvitationStatus.PENDING.name
+
+    private fun invitationDocument(fromUid: String, toUid: String): DocumentReference =
+        firestore.collection(FirestoreSchema.FAMILY_INVITATIONS).document("${fromUid}_$toUid")
+
+    private fun familyEdge(ownerUid: String, memberUid: String): DocumentReference =
+        firestore.collection(FirestoreSchema.USERS).document(ownerUid)
+            .collection(FirestoreSchema.FAMILY).document(memberUid)
+
+    private fun FamilyPermissions.toMap(): Map<String, Boolean> = mapOf(
+        "autoReceiveReminders" to autoReceiveReminders,
+        "canSendWithoutApproval" to canSendWithoutApproval,
+        "canSendWithApproval" to canSendWithApproval,
+        "canViewOnlineStatus" to canViewOnlineStatus,
+        "canViewLastSeen" to canViewLastSeen,
+        "canStartChat" to canStartChat,
+        "canRemoveRelationship" to canRemoveRelationship,
+        "canInviteBack" to canInviteBack,
+    )
+
+    private fun Any?.toFamilyPermissions(): FamilyPermissions {
+        val map = this as? Map<*, *> ?: return FamilyPermissions()
+        fun flag(key: String, default: Boolean) = (map[key] as? Boolean) ?: default
+        val defaults = FamilyPermissions()
+        return FamilyPermissions(
+            autoReceiveReminders = flag("autoReceiveReminders", defaults.autoReceiveReminders),
+            canSendWithoutApproval = flag("canSendWithoutApproval", defaults.canSendWithoutApproval),
+            canSendWithApproval = flag("canSendWithApproval", defaults.canSendWithApproval),
+            canViewOnlineStatus = flag("canViewOnlineStatus", defaults.canViewOnlineStatus),
+            canViewLastSeen = flag("canViewLastSeen", defaults.canViewLastSeen),
+            canStartChat = flag("canStartChat", defaults.canStartChat),
+            canRemoveRelationship = flag("canRemoveRelationship", defaults.canRemoveRelationship),
+            canInviteBack = flag("canInviteBack", defaults.canInviteBack),
+        )
+    }
+
+    // endregion
+
     // region internals
 
     private fun friendEdges(uid: String): Flow<List<FriendUser>> = callbackFlow {
@@ -349,5 +605,7 @@ class FriendRepositoryImpl @Inject constructor(
         val REQUEST_TTL: Duration = Duration.ofDays(30)
         val FRIEND_COUNT_UP = mapOf("friendCount" to FieldValue.increment(1))
         val FRIEND_COUNT_DOWN = mapOf("friendCount" to FieldValue.increment(-1))
+        val FAMILY_COUNT_UP = mapOf("familyCount" to FieldValue.increment(1))
+        val FAMILY_COUNT_DOWN = mapOf("familyCount" to FieldValue.increment(-1))
     }
 }

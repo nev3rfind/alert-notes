@@ -702,6 +702,41 @@
     <string name="friends_error_pending">There\'s already a pending request between you.</string>
     <string name="profile_stat_incoming">Incoming requests</string>
     <string name="profile_stat_outgoing">Outgoing requests</string>
+    <string name="profile_stat_family_incoming">Family invitations</string>
+
+    <!-- Family -->
+    <string name="friends_remove_friend">Remove friend</string>
+    <string name="friends_profile_unavailable">This profile couldn\'t be loaded. It may have been removed, or you\'re offline.</string>
+    <string name="friends_profile_retry">Try again</string>
+    <string name="family_state_member">Family</string>
+    <string name="family_state_invite_sent">Invitation sent</string>
+    <string name="family_state_invite_received">Family invitation</string>
+    <string name="family_section_my">My family</string>
+    <string name="family_section_incoming">Incoming family invitations</string>
+    <string name="family_section_outgoing">Outgoing family invitations</string>
+    <string name="family_section_settings">Family settings</string>
+    <string name="family_settings_privacy">Privacy &amp; who can invite you</string>
+    <string name="family_list_empty">No family members yet. Open a friend\'s profile to invite them to your family.</string>
+    <string name="family_invite">Invite to family</string>
+    <string name="family_invite_send">Send invitation</string>
+    <string name="family_invite_message">Add a message (optional)</string>
+    <string name="family_invite_default">Invited you to become family</string>
+    <string name="family_invite_explainer">Family members are trusted contacts. Later they\'ll be able to send you reminders that arrive automatically, based on the permissions you set.</string>
+    <string name="family_cancel_invitation">Cancel invitation</string>
+    <string name="family_accept">Accept</string>
+    <string name="family_decline">Decline</string>
+    <string name="family_remove">Remove from family</string>
+    <string name="family_stat_shared_completed">Completed shared</string>
+    <string name="family_permissions_edit">Permissions</string>
+    <string name="family_permissions_hide">Done</string>
+    <string name="family_perm_auto_receive">Reminders arrive automatically</string>
+    <string name="family_perm_send_without_approval">Can send without my approval</string>
+    <string name="family_perm_send_with_approval">Can send for my approval</string>
+    <string name="family_perm_view_online">Can see when I\'m online</string>
+    <string name="family_perm_view_last_seen">Can see my last seen</string>
+    <string name="family_perm_start_chat">Can start a chat</string>
+    <string name="friends_error_not_friends">You can only invite friends to your family. Send a friend request first.</string>
+    <string name="friends_error_already_family">You\'re already family.</string>
 
     <!-- Reminder reliability -->
     <string name="settings_reliability_row">Reminder reliability</string>

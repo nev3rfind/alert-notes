@@ -17,12 +17,16 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.SnapshotMutationPolicy
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -39,27 +43,46 @@ import androidx.navigation.toRoute
 import com.alertnotes.R
 import com.alertnotes.core.extensions.toDisplayDateTime
 import com.alertnotes.core.navigation.PublicProfileRoute
+import com.alertnotes.core.ui.components.AppDialog
 import com.alertnotes.core.ui.components.AppOutlinedButton
+import com.alertnotes.core.ui.components.AppTextField
 import com.alertnotes.core.ui.components.AppTopBar
 import com.alertnotes.core.ui.components.PrimaryButton
 import com.alertnotes.core.ui.components.SecondaryButton
 import com.alertnotes.core.ui.theme.spacing
+import com.alertnotes.domain.model.FamilyState
 import com.alertnotes.domain.model.FriendError
 import com.alertnotes.domain.model.FriendException
 import com.alertnotes.domain.model.FriendshipState
 import com.alertnotes.domain.model.PublicProfile
+import com.alertnotes.domain.model.PublicStatistics
 import com.alertnotes.domain.repository.AuthRepository
 import com.alertnotes.domain.repository.FriendRepository
 import com.alertnotes.features.profile.colors
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.time.ZoneId
 import javax.inject.Inject
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.launch
+
+/** Loading resolves to Ready or, after a grace period, Unavailable. */
+sealed interface PublicProfileUiState {
+    data object Loading : PublicProfileUiState
+    data class Ready(val profile: PublicProfile) : PublicProfileUiState
+
+    /** Missing document, revoked rules, or no connection — never a spinner. */
+    data object Unavailable : PublicProfileUiState
+}
 
 @HiltViewModel
 class PublicProfileViewModel @Inject constructor(
@@ -70,32 +93,83 @@ class PublicProfileViewModel @Inject constructor(
 
     private val uid: String = savedStateHandle.toRoute<PublicProfileRoute>().uid
 
-    val profile: StateFlow<PublicProfile?> = friendRepository.observePublicProfile(uid)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+    private val retry = MutableStateFlow(0)
+
+    /**
+     * The fix for the endless-spinner bug: listener errors used to surface
+     * as null forever. Loading now times out into an explicit Unavailable
+     * state the user can retry from.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val uiState: StateFlow<PublicProfileUiState> = retry
+        .flatMapLatest {
+            friendRepository.observePublicProfile(uid)
+                .map<PublicProfile?, PublicProfileUiState> { profile ->
+                    if (profile == null) {
+                        PublicProfileUiState.Loading
+                    } else {
+                        PublicProfileUiState.Ready(profile)
+                    }
+                }
+                .onStart { emit(PublicProfileUiState.Loading) }
+                .transformLatest { state ->
+                    emit(state)
+                    if (state is PublicProfileUiState.Loading) {
+                        delay(LOAD_GRACE_MILLIS)
+                        emit(PublicProfileUiState.Unavailable)
+                    }
+                }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PublicProfileUiState.Loading)
 
     val friendshipState: StateFlow<FriendshipState?> = friendRepository
         .observeFriendshipState(uid)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
+    val familyState: StateFlow<FamilyState?> = friendRepository
+        .observeFamilyState(uid)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    private val _statistics = MutableStateFlow(PublicStatistics())
+    val statistics: StateFlow<PublicStatistics> = _statistics.asStateFlow()
+
     private val _notice = MutableStateFlow<FriendError?>(null)
     val notice: StateFlow<FriendError?> = _notice.asStateFlow()
+
+    init {
+        viewModelScope.launch { _statistics.value = friendRepository.publicStatistics(uid) }
+    }
+
+    fun retryLoad() {
+        retry.value += 1
+    }
 
     fun sendRequest() = act { friendRepository.sendRequest(uid) }
 
     /** Deterministic ids make request references derivable on both sides. */
-    fun cancelRequest() = act {
-        friendRepository.cancelRequest("${requireMe()}_$uid")
-    }
+    fun cancelRequest() = act { friendRepository.cancelRequest("${requireMe()}_$uid") }
 
-    fun acceptRequest() = act {
-        friendRepository.acceptRequest("${uid}_${requireMe()}")
-    }
+    fun acceptRequest() = act { friendRepository.acceptRequest("${uid}_${requireMe()}") }
 
-    fun rejectRequest() = act {
-        friendRepository.rejectRequest("${uid}_${requireMe()}")
-    }
+    fun rejectRequest() = act { friendRepository.rejectRequest("${uid}_${requireMe()}") }
 
     fun removeFriend() = act { friendRepository.removeFriend(uid) }
+
+    fun inviteToFamily(message: String) = act { friendRepository.inviteToFamily(uid, message) }
+
+    fun cancelFamilyInvitation() = act {
+        friendRepository.cancelFamilyInvitation("${requireMe()}_$uid")
+    }
+
+    fun acceptFamilyInvitation() = act {
+        friendRepository.acceptFamilyInvitation("${uid}_${requireMe()}")
+    }
+
+    fun declineFamilyInvitation() = act {
+        friendRepository.declineFamilyInvitation("${uid}_${requireMe()}")
+    }
+
+    fun removeFamilyMember() = act { friendRepository.removeFamilyMember(uid) }
 
     fun dismissNotice() {
         _notice.value = null
@@ -113,23 +187,29 @@ class PublicProfileViewModel @Inject constructor(
             }
         }
     }
+
+    private companion object {
+        const val LOAD_GRACE_MILLIS = 6_000L
+    }
 }
 
 /**
- * Another user's profile — strictly the public section (banner, avatar,
- * identity, status, presence), plus a friendship button that follows the
- * live relationship state. Email, uid, and device data never appear here.
+ * Another user's profile — strictly the public section plus shareable
+ * statistics and relationship actions. Email, uid, and device data never
+ * appear here.
  */
 @Composable
 fun PublicProfileScreen(
     onNavigateBack: () -> Unit,
     viewModel: PublicProfileViewModel = hiltViewModel(),
 ) {
-    val profile by viewModel.profile.collectAsStateWithLifecycle()
-    val state by viewModel.friendshipState.collectAsStateWithLifecycle()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val friendState by viewModel.friendshipState.collectAsStateWithLifecycle()
+    val familyState by viewModel.familyState.collectAsStateWithLifecycle()
+    val statistics by viewModel.statistics.collectAsStateWithLifecycle()
     val notice by viewModel.notice.collectAsStateWithLifecycle()
 
-    androidx.compose.material3.Scaffold(
+    Scaffold(
         topBar = {
             AppTopBar(
                 title = stringResource(R.string.friends_public_profile_title),
@@ -143,11 +223,31 @@ fun PublicProfileScreen(
                 .padding(innerPadding)
                 .fillMaxSize(),
         ) {
-            val current = profile
-            if (current == null) {
-                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-            } else {
-                Column(
+            when (val state = uiState) {
+                PublicProfileUiState.Loading -> CircularProgressIndicator(
+                    modifier = Modifier.align(Alignment.Center),
+                )
+
+                PublicProfileUiState.Unavailable -> Column(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .padding(MaterialTheme.spacing.huge),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        text = stringResource(R.string.friends_profile_unavailable),
+                        style = MaterialTheme.typography.bodyLarge,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    SecondaryButton(
+                        text = stringResource(R.string.friends_profile_retry),
+                        onClick = viewModel::retryLoad,
+                        modifier = Modifier.padding(top = MaterialTheme.spacing.large),
+                    )
+                }
+
+                is PublicProfileUiState.Ready -> Column(
                     modifier = Modifier
                         .widthIn(max = 640.dp)
                         .fillMaxSize()
@@ -155,9 +255,19 @@ fun PublicProfileScreen(
                         .verticalScroll(rememberScrollState())
                         .padding(MaterialTheme.spacing.large),
                 ) {
-                    PublicHero(profile = current)
-                    FriendshipActions(
-                        state = state,
+                    PublicHero(
+                        profile = state.profile,
+                        friendState = friendState,
+                        familyState = familyState,
+                    )
+                    PublicStatsRow(
+                        statistics = statistics,
+                        accent = state.profile.bannerTheme.colors().accent,
+                        modifier = Modifier.padding(top = MaterialTheme.spacing.extraLarge),
+                    )
+                    RelationshipActions(
+                        friendState = friendState,
+                        familyState = familyState,
                         viewModel = viewModel,
                         modifier = Modifier.padding(top = MaterialTheme.spacing.extraLarge),
                     )
@@ -172,7 +282,11 @@ fun PublicProfileScreen(
 }
 
 @Composable
-private fun PublicHero(profile: PublicProfile) {
+private fun PublicHero(
+    profile: PublicProfile,
+    friendState: FriendshipState?,
+    familyState: FamilyState?,
+) {
     val themeColors = profile.bannerTheme.colors()
     Surface(
         shape = MaterialTheme.shapes.extraLarge,
@@ -257,6 +371,17 @@ private fun PublicHero(profile: PublicProfile) {
                             )
                         }
                     }
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
+                        modifier = Modifier.padding(top = MaterialTheme.spacing.medium),
+                    ) {
+                        if (friendState == FriendshipState.FRIENDS) {
+                            RelationBadge(text = stringResource(R.string.friends_state_friends))
+                        }
+                        if (familyState == FamilyState.FAMILY) {
+                            RelationBadge(text = stringResource(R.string.family_state_member))
+                        }
+                    }
                 }
             }
             Box(
@@ -271,24 +396,72 @@ private fun PublicHero(profile: PublicProfile) {
 }
 
 @Composable
-private fun FriendshipActions(
-    state: FriendshipState?,
+private fun PublicStatsRow(
+    statistics: PublicStatistics,
+    accent: Color,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.medium),
+    ) {
+        PublicStat(statistics.friendCount.toString(), R.string.profile_stat_friends, accent, Modifier.weight(1f))
+        PublicStat(statistics.familyCount.toString(), R.string.profile_stat_family, accent, Modifier.weight(1f))
+        PublicStat("—", R.string.profile_stat_shared, accent, Modifier.weight(1f))
+        PublicStat("—", R.string.family_stat_shared_completed, accent, Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun PublicStat(value: String, labelRes: Int, accent: Color, modifier: Modifier) {
+    Surface(
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = modifier,
+    ) {
+        Column(
+            modifier = Modifier.padding(MaterialTheme.spacing.medium),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = accent,
+            )
+            Text(
+                text = stringResource(labelRes),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+        }
+    }
+}
+
+@Composable
+private fun RelationshipActions(
+    friendState: FriendshipState?,
+    familyState: FamilyState?,
     viewModel: PublicProfileViewModel,
     modifier: Modifier = Modifier,
 ) {
+    var showInviteDialog by rememberSaveable { mutableStateOf(false) }
+    var inviteMessage by rememberSaveable { mutableStateOf("") }
+
     Column(
         modifier = modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
     ) {
-        when (state) {
-            null -> Unit
-
-            FriendshipState.SELF -> Text(
-                text = stringResource(R.string.friends_state_self),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        when (friendState) {
+            null, FriendshipState.SELF -> if (friendState == FriendshipState.SELF) {
+                Text(
+                    text = stringResource(R.string.friends_state_self),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
 
             FriendshipState.NONE -> PrimaryButton(
                 text = stringResource(R.string.friends_add),
@@ -296,17 +469,13 @@ private fun FriendshipActions(
                 modifier = Modifier.fillMaxWidth(),
             )
 
-            FriendshipState.REQUEST_SENT -> {
-                StateBadge(text = stringResource(R.string.friends_state_request_sent))
-                AppOutlinedButton(
-                    text = stringResource(R.string.friends_cancel_request),
-                    onClick = viewModel::cancelRequest,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
+            FriendshipState.REQUEST_SENT -> AppOutlinedButton(
+                text = stringResource(R.string.friends_cancel_request),
+                onClick = viewModel::cancelRequest,
+                modifier = Modifier.fillMaxWidth(),
+            )
 
             FriendshipState.REQUEST_RECEIVED -> {
-                StateBadge(text = stringResource(R.string.friends_state_pending))
                 PrimaryButton(
                     text = stringResource(R.string.friends_accept),
                     onClick = viewModel::acceptRequest,
@@ -320,19 +489,76 @@ private fun FriendshipActions(
             }
 
             FriendshipState.FRIENDS -> {
-                StateBadge(text = stringResource(R.string.friends_state_friends))
-                AppOutlinedButton(
-                    text = stringResource(R.string.friends_remove),
-                    onClick = viewModel::removeFriend,
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                // Family actions unlock once you are friends.
+                when (familyState) {
+                    null, FamilyState.NONE -> PrimaryButton(
+                        text = stringResource(R.string.family_invite),
+                        onClick = { showInviteDialog = true },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+
+                    FamilyState.INVITE_SENT -> AppOutlinedButton(
+                        text = stringResource(R.string.family_cancel_invitation),
+                        onClick = viewModel::cancelFamilyInvitation,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+
+                    FamilyState.INVITE_RECEIVED -> {
+                        PrimaryButton(
+                            text = stringResource(R.string.family_accept),
+                            onClick = viewModel::acceptFamilyInvitation,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        SecondaryButton(
+                            text = stringResource(R.string.family_decline),
+                            onClick = viewModel::declineFamilyInvitation,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+
+                    FamilyState.FAMILY -> AppOutlinedButton(
+                        text = stringResource(R.string.family_remove),
+                        onClick = viewModel::removeFamilyMember,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                TextButton(onClick = viewModel::removeFriend) {
+                    Text(
+                        text = stringResource(R.string.friends_remove_friend),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
             }
+        }
+    }
+
+    if (showInviteDialog) {
+        AppDialog(
+            title = stringResource(R.string.family_invite),
+            onDismiss = { showInviteDialog = false },
+            confirmText = stringResource(R.string.family_invite_send),
+            onConfirm = {
+                showInviteDialog = false
+                viewModel.inviteToFamily(inviteMessage)
+                inviteMessage = ""
+            },
+        ) {
+            Text(
+                text = stringResource(R.string.family_invite_explainer),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(bottom = MaterialTheme.spacing.medium),
+            )
+            AppTextField(
+                value = inviteMessage,
+                onValueChange = { inviteMessage = it },
+                label = stringResource(R.string.family_invite_message),
+            )
         }
     }
 }
 
 @Composable
-private fun StateBadge(text: String) {
+private fun RelationBadge(text: String) {
     Surface(
         shape = MaterialTheme.shapes.extraLarge,
         color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),

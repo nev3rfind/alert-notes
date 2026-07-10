@@ -86,8 +86,16 @@ data class ProfileDashboard(
     val family: Int = 0,
     val devices: Int = 0,
     val incomingRequests: Int = 0,
-    val outgoingRequests: Int = 0,
+    val incomingFamilyInvitations: Int = 0,
     val accountAgeDays: Long? = null,
+)
+
+/** Bundles the four friend-graph counters through the dashboard combine. */
+private data class RelationshipCounts(
+    val friends: Int,
+    val incomingRequests: Int,
+    val family: Int,
+    val incomingFamily: Int,
 )
 
 @HiltViewModel
@@ -124,15 +132,16 @@ class ProfileViewModel @Inject constructor(
         historyRepository.observeHistory(),
         profileRepository.profile,
         profileRepository.deviceCount,
-        // Live friend/request counters from the friend graph listeners.
+        // Live relationship counters from the friend graph listeners.
         combine(
             friendRepository.friends,
             friendRepository.incomingRequests,
-            friendRepository.outgoingRequests,
-        ) { friendList, incoming, outgoing ->
-            Triple(friendList.size, incoming.size, outgoing.size)
+            friendRepository.family,
+            friendRepository.incomingFamilyInvitations,
+        ) { friendList, incoming, familyList, incomingFamily ->
+            RelationshipCounts(friendList.size, incoming.size, familyList.size, incomingFamily.size)
         },
-    ) { stats, history, profile, devices, friendCounts ->
+    ) { stats, history, profile, devices, counts ->
         ProfileDashboard(
             activeReminders = stats.enabled,
             // The history flow is bounded to recent entries, so this is a
@@ -140,11 +149,11 @@ class ProfileViewModel @Inject constructor(
             // dedicated counter lands with the statistics work.
             completed = history.count { it.dismissedAt != null },
             shared = profile?.statistics?.sharedReminderCount ?: 0,
-            friends = friendCounts.first,
-            family = profile?.statistics?.familyCount ?: 0,
+            friends = counts.friends,
+            family = counts.family,
             devices = devices,
-            incomingRequests = friendCounts.second,
-            outgoingRequests = friendCounts.third,
+            incomingRequests = counts.incomingRequests,
+            incomingFamilyInvitations = counts.incomingFamily,
             accountAgeDays = profile?.privateProfile?.memberSince?.let { since ->
                 Duration.between(since, timeProvider.now()).toDays().coerceAtLeast(0)
             },
