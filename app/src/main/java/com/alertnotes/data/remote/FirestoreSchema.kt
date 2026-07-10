@@ -85,6 +85,14 @@ object FirestoreSchema {
     const val FAMILY = "family"
 
     /**
+     * Durable Notification Centre entries: `users/{uid}/notifications/{id}`.
+     * Event producers create into the RECIPIENT's collection (rules pin the
+     * sender's uid); reading and managing them stays owner-only. Push
+     * notifications are the transient mirror of these documents.
+     */
+    const val NOTIFICATIONS = "notifications"
+
+    /**
      * Reminder shares, top-level `reminderShares/{ownerUid}_{reminderId}_{recipientUid}`.
      * Owner-writable, readable by owner and recipient. The reminder body
      * stays in the owner's local database; this is only the sharing edge

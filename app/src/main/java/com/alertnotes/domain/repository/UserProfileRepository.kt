@@ -56,6 +56,6 @@ interface UserProfileRepository {
     /** Mirrors a locally-changed preference into the preferences section. */
     suspend fun syncPreference(key: String, value: Any)
 
-    /** Presence heartbeat; also stamps lastSeen when going offline. */
-    suspend fun setPresence(online: Boolean)
+    /** Presence transition or heartbeat; every write stamps lastSeen. */
+    suspend fun setPresence(state: com.alertnotes.domain.model.PresenceState)
 }

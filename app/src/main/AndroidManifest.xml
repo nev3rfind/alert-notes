@@ -82,6 +82,17 @@
             android:taskAffinity=""
             android:theme="@style/Theme.AlertNotes" />
 
+        <!-- FCM entry point: data-only pushes for chat, social, sharing, and
+             silent sync wake-ups. Notifications the user sees are always
+             built locally (channels, deep links, smart suppression). -->
+        <service
+            android:name=".services.AlertNotesMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
         <receiver
             android:name=".services.ReminderAlarmReceiver"
             android:exported="false" />

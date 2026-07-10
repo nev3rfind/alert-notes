@@ -61,6 +61,37 @@ class DeviceRemoteDataSource @Inject constructor(
         }
     }
 
+    /**
+     * Stores this device's current FCM registration token. Multi-device is
+     * structural — one token per device document. `pushTokenUpdatedAt` lets
+     * the send layer prune tokens that have gone stale.
+     */
+    suspend fun updatePushToken(uid: String, token: String) {
+        firestore.collection(FirestoreSchema.USERS)
+            .document(uid)
+            .collection(FirestoreSchema.DEVICES)
+            .document(currentDeviceId())
+            .set(
+                mapOf(
+                    "deviceId" to currentDeviceId(),
+                    "pushToken" to token,
+                    "pushTokenUpdatedAt" to FieldValue.serverTimestamp(),
+                ),
+                SetOptions.merge(),
+            )
+            .await()
+    }
+
+    /** Sign-out hygiene: a signed-out device must never be pushed to. */
+    suspend fun clearPushToken(uid: String) {
+        firestore.collection(FirestoreSchema.USERS)
+            .document(uid)
+            .collection(FirestoreSchema.DEVICES)
+            .document(currentDeviceId())
+            .set(mapOf("pushToken" to null), SetOptions.merge())
+            .await()
+    }
+
     /** Live count of registered devices; drives the profile dashboard. */
     fun observeDeviceCount(uid: String): Flow<Int> = callbackFlow {
         val registration = firestore.collection(FirestoreSchema.USERS)

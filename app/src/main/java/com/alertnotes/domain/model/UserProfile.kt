@@ -2,6 +2,14 @@ package com.alertnotes.domain.model
 
 import java.time.Instant
 
+/**
+ * Realtime presence. ONLINE = app foregrounded (heartbeat fresh); AWAY = app
+ * backgrounded but recently active; OFFLINE = signed out or gone. A stale
+ * heartbeat reads as OFFLINE on the consumer side — a force-killed process
+ * never gets to say goodbye.
+ */
+enum class PresenceState { ONLINE, AWAY, OFFLINE }
+
 /** The `public` profile section — everything other users may eventually see. */
 data class PublicProfile(
     val displayName: String = "",
@@ -9,6 +17,7 @@ data class PublicProfile(
     val photoUrl: String? = null,
     val statusMessage: String = "",
     val online: Boolean = false,
+    val presence: PresenceState = PresenceState.OFFLINE,
     val lastSeen: Instant? = null,
     /** Banner + accent personalisation; public so friends see it too. */
     val bannerTheme: ProfileTheme = ProfileTheme.PRIMARY_ORANGE,

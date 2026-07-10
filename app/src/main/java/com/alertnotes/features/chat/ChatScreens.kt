@@ -28,6 +28,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -168,6 +169,13 @@ class ChatViewModel @Inject constructor(
         viewModelScope.launch { runCatching { chatRepository.markRead(otherUid) } }
     }
 
+    /** Smart delivery: suppress pushes for the conversation on screen. */
+    fun setChatVisible(visible: Boolean) {
+        viewModelScope.launch {
+            runCatching { chatRepository.setActiveConversation(if (visible) otherUid else null) }
+        }
+    }
+
     fun deleteForMe(messageId: String) {
         viewModelScope.launch {
             runCatching { chatRepository.deleteForMe(otherUid, messageId) }
@@ -209,6 +217,13 @@ fun ChatScreen(
         if (messages.isNotEmpty()) listState.animateScrollToItem(messages.lastIndex)
     }
 
+    // Smart delivery: while this conversation is on screen, its pushes are
+    // suppressed (locally and server-side) — realtime updates render first.
+    DisposableEffect(Unit) {
+        viewModel.setChatVisible(true)
+        onDispose { viewModel.setChatVisible(false) }
+    }
+
     Scaffold(
         topBar = {
             AppTopBar(
@@ -245,7 +260,12 @@ fun ChatScreen(
                         conversation?.otherTyping == true ->
                             stringResource(R.string.chat_typing)
 
-                        p.online -> stringResource(R.string.profile_presence_online)
+                        p.presence == com.alertnotes.domain.model.PresenceState.ONLINE ->
+                            stringResource(R.string.profile_presence_online)
+
+                        p.presence == com.alertnotes.domain.model.PresenceState.AWAY ->
+                            stringResource(R.string.profile_presence_away)
+
                         p.lastSeen != null -> stringResource(
                             R.string.profile_last_seen,
                             p.lastSeen.toDisplayDateTime(zone),

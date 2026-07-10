@@ -35,7 +35,11 @@ import com.alertnotes.core.ui.rememberWindowWidthClass
  * phones, a navigation rail on tablets and wide windows — around the nav host.
  */
 @Composable
-fun AlertNotesApp(createReminderRequestId: Int = 0) {
+fun AlertNotesApp(
+    createReminderRequestId: Int = 0,
+    deepLink: String? = null,
+    deepLinkRequestId: Int = 0,
+) {
     val windowWidthClass = rememberWindowWidthClass()
     val navController = rememberNavController()
 
@@ -48,6 +52,22 @@ fun AlertNotesApp(createReminderRequestId: Int = 0) {
         if (createReminderRequestId > consumedEditorRequestId) {
             consumedEditorRequestId = createReminderRequestId
             navController.navigate(ReminderEditorRoute(Reminder.NEW_ID))
+        }
+    }
+
+    // Push-notification taps: same consume-once pattern as the widget.
+    var consumedDeepLinkRequestId by rememberSaveable { mutableIntStateOf(0) }
+    LaunchedEffect(deepLinkRequestId) {
+        if (deepLinkRequestId > consumedDeepLinkRequestId && deepLink != null) {
+            consumedDeepLinkRequestId = deepLinkRequestId
+            when {
+                deepLink.startsWith("chat:") ->
+                    navController.navigate(ChatRoute(deepLink.removePrefix("chat:")))
+
+                deepLink == "shared" -> navController.navigate(SharedRemindersRoute)
+                deepLink == "inbox" -> navController.navigate(InboxRoute)
+                else -> navController.navigate(NotificationCentreRoute)
+            }
         }
     }
     val backStackEntry by navController.currentBackStackEntryAsState()

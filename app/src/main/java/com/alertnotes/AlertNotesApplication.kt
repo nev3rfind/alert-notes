@@ -38,12 +38,17 @@ class AlertNotesApplication : Application() {
     @Inject
     lateinit var shareDeliveryObserver: ShareDeliveryObserver
 
+    /** Keeps this device's FCM token registered; no-op offline. */
+    @Inject
+    lateinit var pushTokenManager: com.alertnotes.services.PushTokenManager
+
     override fun onCreate() {
         super.onCreate()
         verifyFirebase()
         alertDispatcher.start()
         presenceManager.start()
         shareDeliveryObserver.start()
+        pushTokenManager.start()
         // Reconcile alarms on every process start: a force-stop (aggressive
         // battery managers, "Force stop" in app info) silently cancels every
         // AlarmManager alarm, and boot/time receivers never fire for that

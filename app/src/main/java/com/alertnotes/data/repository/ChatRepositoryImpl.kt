@@ -49,6 +49,9 @@ class ChatRepositoryImpl @Inject constructor(
     authRepository: AuthRepository,
     private val friendRepository: FriendRepository,
     private val firestore: FirebaseFirestore,
+    private val identity: OwnIdentityCache,
+    private val notificationCentre: com.alertnotes.domain.repository.NotificationCentreRepository,
+    private val chatSessionTracker: com.alertnotes.services.ChatSessionTracker,
     private val logger: AppLogger,
 ) : ChatRepository {
 
@@ -122,6 +125,8 @@ class ChatRepositoryImpl @Inject constructor(
                 }
             }.await()
         }
+        // Opening the conversation resolves its centre entry too.
+        notificationCentre.markRead("chat_" + listOf(me, otherUid).sorted().joinToString("_"))
         Unit
     }
 
@@ -132,6 +137,24 @@ class ChatRepositoryImpl @Inject constructor(
                 .set(mapOf("typing_$me" to typing), SetOptions.merge())
                 .await()
         }
+    }
+
+    override suspend fun setActiveConversation(otherUid: String?) {
+        val me = auth.currentUser?.uid ?: return
+        // Local half first — the messaging service reads it synchronously.
+        if (otherUid != null) {
+            chatSessionTracker.onConversationVisible(otherUid)
+        } else {
+            chatSessionTracker.activePartnerUid.value?.let(chatSessionTracker::onConversationHidden)
+        }
+        // Server half: the Cloud Function checks this before pushing.
+        runCatching {
+            val chatId = otherUid?.let { listOf(me, it).sorted().joinToString("_") }
+            firestore.collection(FirestoreSchema.USERS).document(me)
+                .collection(FirestoreSchema.SECTION_PRIVATE).document(FirestoreSchema.SECTION_DOC)
+                .set(mapOf("activeChatId" to chatId), SetOptions.merge())
+                .await()
+        }.onFailure { logger.d(TAG, "Active-conversation mirror failed: ${it.message}") }
     }
 
     override suspend fun deleteForMe(otherUid: String, messageId: String) = runChatOp {
@@ -191,6 +214,19 @@ class ChatRepositoryImpl @Inject constructor(
                 SetOptions.merge(),
             )
         }.await()
+        // One durable centre entry per conversation, re-surfacing as unread
+        // on each new message — never one entry per message. System events
+        // publish their own share-lifecycle entries.
+        if (type == MessageType.TEXT) {
+            notificationCentre.publish(
+                recipientUid = otherUid,
+                category = com.alertnotes.domain.model.NotificationCategory.CHAT_MESSAGE,
+                title = identity.displayName(),
+                body = text.take(CHAT_PREVIEW_LENGTH),
+                refId = me,
+                dedupeKey = "chat_" + listOf(me, otherUid).sorted().joinToString("_"),
+            )
+        }
     }
 
     private fun conversationDocs(me: String): Flow<List<ChatConversation>> = callbackFlow {
@@ -280,5 +316,6 @@ class ChatRepositoryImpl @Inject constructor(
     private companion object {
         const val TAG = "ChatRepository"
         const val MESSAGE_PAGE = 100L
+        const val CHAT_PREVIEW_LENGTH = 80
     }
 }

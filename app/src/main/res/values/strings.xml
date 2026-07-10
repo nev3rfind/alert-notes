@@ -27,6 +27,33 @@
     <string name="nav_exit">Exit</string>
     <string name="nav_more">More</string>
 
+    <!-- Notification Centre + push channels + presence -->
+    <string name="notifications_title">Notifications</string>
+    <string name="notifications_row_subtitle">Every request, invitation, and update in one place</string>
+    <string name="notifications_section">Events</string>
+    <string name="notifications_search_hint">Search notifications</string>
+    <string name="notifications_filter_unread">Unread</string>
+    <string name="notifications_filter_all">All</string>
+    <string name="notifications_filter_archived">Archived</string>
+    <string name="notifications_category_all">Everything</string>
+    <string name="notifications_category_social">Requests</string>
+    <string name="notifications_category_reminders">Reminders</string>
+    <string name="notifications_category_messages">Messages</string>
+    <string name="notifications_mark_all_read">Mark all read</string>
+    <string name="notifications_archive">Archive</string>
+    <string name="notifications_unarchive">Unarchive</string>
+    <string name="notifications_delete">Delete</string>
+    <string name="notifications_empty_unread">You\'re all caught up — nothing unread.</string>
+    <string name="notifications_empty_all">Nothing here yet. Requests, invitations, and reminder updates will appear as they happen.</string>
+    <string name="notifications_empty_archived">No archived notifications.</string>
+    <string name="channel_chat">Chat messages</string>
+    <string name="channel_chat_description">New messages from friends and family</string>
+    <string name="channel_social">Friends &amp; family</string>
+    <string name="channel_social_description">Friend requests and family invitations</string>
+    <string name="channel_sharing">Shared reminders</string>
+    <string name="channel_sharing_description">Reminder invitations, updates, and status changes</string>
+    <string name="profile_presence_away">Away</string>
+
     <!-- Reminder ownership + sharing details -->
     <string name="sharing_step_ownership">Reminder ownership</string>
     <string name="sharing_ownership_only_me_hint">Keeps the reminder private to this device.</string>

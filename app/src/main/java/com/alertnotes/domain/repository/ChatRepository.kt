@@ -45,4 +45,11 @@ interface ChatRepository {
 
     /** Delete-for-me: hides the message on this account only. */
     suspend fun deleteForMe(otherUid: String, messageId: String)
+
+    /**
+     * Smart-delivery signal: which conversation is on screen (null = none).
+     * Mirrored to the private profile section so the push layer can skip
+     * notifying about a conversation the user is already looking at.
+     */
+    suspend fun setActiveConversation(otherUid: String?)
 }

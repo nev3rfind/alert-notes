@@ -96,10 +96,18 @@ class AuthRepositoryImpl @Inject constructor(
     }
 
     override suspend fun signOut() {
-        // Best-effort farewell while the rules still allow the write.
+        // Best-effort farewell while the rules still allow the writes: mark
+        // OFFLINE and drop this device's push token so a signed-out device
+        // can never receive another notification for the account.
         auth.currentUser?.let { user ->
-            runCatching { profileDataSource.setPresence(user.uid, online = false) }
-                .onFailure { logger.w(TAG, "Offline presence write failed", it) }
+            runCatching {
+                profileDataSource.setPresence(
+                    user.uid,
+                    com.alertnotes.domain.model.PresenceState.OFFLINE,
+                )
+            }.onFailure { logger.w(TAG, "Offline presence write failed", it) }
+            runCatching { deviceDataSource.clearPushToken(user.uid) }
+                .onFailure { logger.w(TAG, "Push token clear failed", it) }
         }
         auth.signOut()
         logger.i(TAG, "Signed out")
@@ -122,8 +130,12 @@ class AuthRepositoryImpl @Inject constructor(
 
     /** Presence bookkeeping — the app is in the foreground when this runs. */
     private suspend fun markOnline(user: FirebaseUser) {
-        runCatching { profileDataSource.setPresence(user.uid, online = true) }
-            .onFailure { logger.w(TAG, "Online presence write failed", it) }
+        runCatching {
+            profileDataSource.setPresence(
+                user.uid,
+                com.alertnotes.domain.model.PresenceState.ONLINE,
+            )
+        }.onFailure { logger.w(TAG, "Online presence write failed", it) }
     }
 
     private fun FirebaseUser.toAuthUser(): AuthUser = AuthUser(

@@ -95,4 +95,5 @@ dependencies {
     implementation(libs.firebase.storage)
     implementation(libs.kotlinx.coroutines.play.services)
     implementation(libs.coil.compose)
+    implementation("com.google.firebase:firebase-messaging")
 }

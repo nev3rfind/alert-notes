@@ -34,6 +34,9 @@ data object SharedRemindersRoute
 data object InboxRoute
 
 @Serializable
+data object NotificationCentreRoute
+
+@Serializable
 data object MessagesRoute
 
 /** 1:1 conversation with [otherUid]. */

@@ -233,10 +233,13 @@ class UserProfileRemoteDataSource @Inject constructor(
         }.await()
     }
 
-    /** Presence heartbeat; lastSeen is stamped in both directions. */
-    suspend fun setPresence(uid: String, online: Boolean) {
+    /** Presence transition or heartbeat; lastSeen is stamped every write. */
+    suspend fun setPresence(uid: String, state: com.alertnotes.domain.model.PresenceState) {
         val update = mapOf(
-            "online" to online,
+            // Legacy boolean kept for older readers; presenceState is the
+            // richer truth (ONLINE / AWAY / OFFLINE).
+            "online" to (state == com.alertnotes.domain.model.PresenceState.ONLINE),
+            "presenceState" to state.name,
             "lastSeen" to FieldValue.serverTimestamp(),
         )
         section(uid, FirestoreSchema.SECTION_PUBLIC)

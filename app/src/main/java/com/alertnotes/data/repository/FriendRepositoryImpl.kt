@@ -57,6 +57,8 @@ class FriendRepositoryImpl @Inject constructor(
     private val auth: FirebaseAuth,
     authRepository: AuthRepository,
     private val firestore: FirebaseFirestore,
+    private val identity: OwnIdentityCache,
+    private val notificationCentre: com.alertnotes.domain.repository.NotificationCentreRepository,
     private val logger: AppLogger,
 ) : FriendRepository {
 
@@ -167,6 +169,13 @@ class FriendRepositoryImpl @Inject constructor(
                 "respondedAt" to null,
             ),
         ).await()
+        notificationCentre.publish(
+            recipientUid = toUid,
+            category = com.alertnotes.domain.model.NotificationCategory.FRIEND_REQUEST,
+            title = "New friend request",
+            body = "${identity.displayName()} wants to be your friend",
+            dedupeKey = "friend_$me",
+        )
         Unit
     }
 
@@ -286,6 +295,13 @@ class FriendRepositoryImpl @Inject constructor(
                 "respondedAt" to null,
             ),
         ).await()
+        notificationCentre.publish(
+            recipientUid = toUid,
+            category = com.alertnotes.domain.model.NotificationCategory.FAMILY_INVITATION,
+            title = "Family invitation",
+            body = "${identity.displayName()} invited you to join their family circle",
+            dedupeKey = "family_$me",
+        )
         Unit
     }
 

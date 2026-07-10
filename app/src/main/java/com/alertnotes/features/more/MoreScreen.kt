@@ -16,6 +16,7 @@ import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.CloudSync
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Inbox
+import androidx.compose.material.icons.outlined.NotificationsNone
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Settings
@@ -49,6 +50,7 @@ fun MoreScreen(
     onOpenSettings: () -> Unit,
     onOpenDiagnostics: () -> Unit,
     onOpenInbox: () -> Unit,
+    onOpenNotifications: () -> Unit,
     onOpenShareReminder: () -> Unit,
     onOpenSharedReminders: () -> Unit,
     onExit: () -> Unit,
@@ -105,6 +107,13 @@ fun MoreScreen(
                             supportingText = stringResource(R.string.inbox_row_subtitle),
                             leadingIcon = Icons.Outlined.Inbox,
                             onClick = onOpenInbox,
+                            trailingContent = { Chevron() },
+                        )
+                        AppListItem(
+                            title = stringResource(R.string.notifications_title),
+                            supportingText = stringResource(R.string.notifications_row_subtitle),
+                            leadingIcon = Icons.Outlined.NotificationsNone,
+                            onClick = onOpenNotifications,
                             trailingContent = { Chevron() },
                         )
                         AppListItem(

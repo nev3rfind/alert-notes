@@ -76,6 +76,8 @@ class ReminderSharingRepositoryImpl @Inject constructor(
     private val timeProvider: TimeProvider,
     private val firestore: FirebaseFirestore,
     private val chatRepository: ChatRepository,
+    private val identity: OwnIdentityCache,
+    private val notificationCentre: com.alertnotes.domain.repository.NotificationCentreRepository,
     private val logger: AppLogger,
 ) : ReminderSharingRepository {
 
@@ -168,12 +170,25 @@ class ReminderSharingRepositoryImpl @Inject constructor(
             SystemMessageKind.REMINDER_SHARED
         }
         recipientUids.forEach { recipientUid ->
+            val shareId = "${owner}_${reminder.id}_$recipientUid"
             narrate(
                 recipientUid,
                 narrationKind,
-                shareId = "${owner}_${reminder.id}_$recipientUid",
+                shareId = shareId,
                 shareTitle = reminder.title,
                 shareSchedule = scheduleSummary,
+            )
+            notificationCentre.publish(
+                recipientUid = recipientUid,
+                category = com.alertnotes.domain.model.NotificationCategory.REMINDER_INVITATION,
+                title = if (ownership == ReminderOwnership.RECIPIENTS_ONLY) {
+                    "Reminder assigned to you"
+                } else {
+                    "Reminder invitation"
+                },
+                body = "${identity.displayName()} sent “${reminder.title}”",
+                refId = shareId,
+                dedupeKey = "share_${shareId}_invite",
             )
         }
         logger.i(TAG, "Reminder shared with ${recipientUids.size} recipient(s) as $ownership")
@@ -202,6 +217,14 @@ class ReminderSharingRepositoryImpl @Inject constructor(
             shareTitle = share.title,
             shareSchedule = share.scheduleSummary,
         )
+        notificationCentre.publish(
+            recipientUid = share.ownerUid,
+            category = com.alertnotes.domain.model.NotificationCategory.REMINDER_ACCEPTED,
+            title = "Reminder accepted",
+            body = "${identity.displayName()} accepted “${share.title}”",
+            refId = share.id,
+            dedupeKey = "share_${share.id}_response",
+        )
     }
 
     override suspend fun declineShare(shareId: String) = runShareOp {
@@ -214,8 +237,16 @@ class ReminderSharingRepositoryImpl @Inject constructor(
             SetOptions.merge(),
         ).await()
         // The id encodes the owner: {owner}_{reminderId}_{recipient}.
-        shareId.substringBefore('_').takeIf { it.isNotBlank() }?.let {
-            narrate(it, SystemMessageKind.REMINDER_REJECTED)
+        shareId.substringBefore('_').takeIf { it.isNotBlank() }?.let { ownerUid ->
+            narrate(ownerUid, SystemMessageKind.REMINDER_REJECTED)
+            notificationCentre.publish(
+                recipientUid = ownerUid,
+                category = com.alertnotes.domain.model.NotificationCategory.REMINDER_REJECTED,
+                title = "Reminder declined",
+                body = "${identity.displayName()} declined a shared reminder",
+                refId = shareId,
+                dedupeKey = "share_${shareId}_response",
+            )
         }
         Unit
     }
@@ -229,7 +260,25 @@ class ReminderSharingRepositoryImpl @Inject constructor(
             ),
             SetOptions.merge(),
         ).await()
+        notifyCancelled(shareId)
         Unit
+    }
+
+    /** The id encodes the recipient: {owner}_{reminderId}_{recipient}. */
+    private suspend fun notifyCancelled(shareId: String, title: String = "") {
+        val recipientUid = shareId.substringAfterLast('_').takeIf { it.isNotBlank() } ?: return
+        notificationCentre.publish(
+            recipientUid = recipientUid,
+            category = com.alertnotes.domain.model.NotificationCategory.REMINDER_CANCELLED,
+            title = "Reminder cancelled",
+            body = if (title.isBlank()) {
+                "${identity.displayName()} cancelled a shared reminder"
+            } else {
+                "${identity.displayName()} cancelled “$title”"
+            },
+            refId = shareId,
+            dedupeKey = "share_${shareId}_cancel",
+        )
     }
 
     override suspend fun deleteOwnedReminder(reminderId: Long) = runShareOp {
@@ -252,6 +301,7 @@ class ReminderSharingRepositoryImpl @Inject constructor(
                     ),
                     SetOptions.merge(),
                 ).await()
+                notifyCancelled(share.id, share.title)
             }
         if (reminderRepository.getReminder(reminderId) != null) {
             coordinator.delete(reminderId)
@@ -341,6 +391,14 @@ class ReminderSharingRepositoryImpl @Inject constructor(
             ),
             SetOptions.merge(),
         ).await()
+        notificationCentre.publish(
+            recipientUid = share.ownerUid,
+            category = com.alertnotes.domain.model.NotificationCategory.REMINDER_TRIGGERED,
+            title = if (completed) "Reminder completed" else "Reminder triggered",
+            body = "“${share.title}” fired on ${identity.displayName()}’s device",
+            refId = share.id,
+            dedupeKey = "share_${share.id}_fired",
+        )
     }
 
     /** Re-applies the payload onto the recipient's existing local copy. */
@@ -415,6 +473,16 @@ class ReminderSharingRepositoryImpl @Inject constructor(
             ),
             SetOptions.merge(),
         ).await()
+        if (delivered) {
+            notificationCentre.publish(
+                recipientUid = share.recipientUid,
+                category = com.alertnotes.domain.model.NotificationCategory.REMINDER_UPDATED,
+                title = "Reminder updated",
+                body = "${identity.displayName()} updated “${reminder.title}”",
+                refId = share.id,
+                dedupeKey = "share_${share.id}_update",
+            )
+        }
         logger.i(TAG, "Edit pushed to ${share.id} as v${share.payloadVersion + 1}")
     }
 

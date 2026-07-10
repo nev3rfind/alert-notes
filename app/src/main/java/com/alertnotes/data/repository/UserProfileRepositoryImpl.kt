@@ -178,9 +178,9 @@ class UserProfileRepositoryImpl @Inject constructor(
         profileDataSource.syncPreference(user.uid, key, value)
     }
 
-    override suspend fun setPresence(online: Boolean) {
+    override suspend fun setPresence(state: com.alertnotes.domain.model.PresenceState) {
         val user = auth.currentUser ?: return
-        profileDataSource.setPresence(user.uid, online)
+        profileDataSource.setPresence(user.uid, state)
     }
 
     private fun requireUser(): FirebaseUser =
