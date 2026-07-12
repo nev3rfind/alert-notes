@@ -12,6 +12,7 @@ import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.Group
@@ -22,6 +23,7 @@ import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.alertnotes.R
 
@@ -55,11 +57,11 @@ enum class TopLevelDestination(
         unselectedIcon = Icons.Outlined.Group,
         labelRes = R.string.nav_friends,
     ),
-    MESSAGES(
-        route = MessagesRoute,
-        selectedIcon = Icons.Filled.ChatBubble,
-        unselectedIcon = Icons.Outlined.ChatBubbleOutline,
-        labelRes = R.string.nav_messages,
+    SHARE(
+        route = ShareReminderRoute(),
+        selectedIcon = Icons.Filled.Share,
+        unselectedIcon = Icons.Outlined.Share,
+        labelRes = R.string.nav_share,
     ),
     MORE(
         route = MoreRoute,

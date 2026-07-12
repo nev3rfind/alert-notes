@@ -57,10 +57,11 @@ fun ReminderEditorScreen(
     reminderId: Long,
     onClose: () -> Unit,
     initialEpochDay: Long = -1,
+    onShareSaved: ((Long) -> Unit)? = null,
 ) {
     val viewModel = rememberEditorViewModel(reminderId, initialEpochDay)
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val session = rememberEditorSession(viewModel, onClose)
+    val session = rememberEditorSession(viewModel, onClose, onShareSaved)
     val editing = uiState as? EditorUiState.Editing
 
     BackHandler(enabled = editing?.isDirty == true) {
@@ -212,6 +213,7 @@ private class EditorSession(
 private fun rememberEditorSession(
     viewModel: ReminderEditorViewModel,
     onClose: () -> Unit,
+    onShareSaved: ((Long) -> Unit)? = null,
 ): EditorSession {
     val showDiscardDialog = rememberSaveable { mutableStateOf(false) }
     val showDeleteDialog = rememberSaveable { mutableStateOf(false) }
@@ -220,7 +222,12 @@ private fun rememberEditorSession(
     }
     val isFinished by viewModel.isFinished.collectAsStateWithLifecycle()
     LaunchedEffect(isFinished) {
-        if (isFinished) onClose()
+        if (isFinished) {
+            // A brand-new reminder saved in online mode flows into the
+            // "who should receive this?" chooser when the host supports it.
+            val shareId = viewModel.savedForSharing.value
+            if (shareId != null && onShareSaved != null) onShareSaved(shareId) else onClose()
+        }
     }
     return session
 }

@@ -53,6 +53,13 @@ object FirestoreSchema {
     const val USERNAMES = "usernames"
 
     /**
+     * Users the owner has blocked: `users/{uid}/blocked/{blockedUid}`.
+     * Owner-only readable; rules consult it to refuse the blocked party's
+     * messages, requests, shares, and profile reads.
+     */
+    const val BLOCKED = "blocked"
+
+    /**
      * 1:1 conversations, doc id = the two uids sorted and joined with `_`
      * (deterministic — one conversation per pair). Messages live in the
      * [CHAT_MESSAGES] subcollection.

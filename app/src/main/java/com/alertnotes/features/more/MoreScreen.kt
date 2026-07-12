@@ -15,22 +15,44 @@ import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.CloudSync
 import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material.icons.outlined.NotificationsNone
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Verified
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewModelScope
 import com.alertnotes.R
+import com.alertnotes.domain.model.AppMode
+import com.alertnotes.domain.repository.AuthRepository
+import com.alertnotes.domain.repository.SettingsRepository
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import com.alertnotes.core.ui.components.AppListItem
 import com.alertnotes.core.ui.components.AppTopBar
 import com.alertnotes.core.ui.components.SectionCard
@@ -51,10 +73,42 @@ fun MoreScreen(
     onOpenDiagnostics: () -> Unit,
     onOpenInbox: () -> Unit,
     onOpenNotifications: () -> Unit,
+    onOpenMessages: () -> Unit,
+    onOpenDevices: () -> Unit,
     onOpenShareReminder: () -> Unit,
     onOpenSharedReminders: () -> Unit,
     onExit: () -> Unit,
+    viewModel: MoreViewModel = hiltViewModel(),
 ) {
+    val showAccountActions by viewModel.showAccountActions
+        .collectAsStateWithLifecycle()
+    var showLogOutDialog by rememberSaveable { mutableStateOf(false) }
+    if (showLogOutDialog) {
+        AlertDialog(
+            onDismissRequest = { showLogOutDialog = false },
+            shape = MaterialTheme.shapes.extraLarge,
+            title = { Text(text = stringResource(R.string.more_logout_confirm_title)) },
+            text = { Text(text = stringResource(R.string.more_logout_confirm_message)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.logOut()
+                        showLogOutDialog = false
+                    },
+                ) {
+                    Text(
+                        text = stringResource(R.string.more_logout),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLogOutDialog = false }) {
+                    Text(text = stringResource(R.string.action_cancel))
+                }
+            },
+        )
+    }
     Scaffold(
         topBar = { AppTopBar(title = stringResource(R.string.nav_more)) },
         containerColor = MaterialTheme.colorScheme.background,
@@ -103,6 +157,13 @@ fun MoreScreen(
                 item {
                     SectionCard(title = stringResource(R.string.sharing_section_title)) {
                         AppListItem(
+                            title = stringResource(R.string.nav_messages),
+                            supportingText = stringResource(R.string.more_messages_subtitle),
+                            leadingIcon = Icons.Outlined.ChatBubbleOutline,
+                            onClick = onOpenMessages,
+                            trailingContent = { Chevron() },
+                        )
+                        AppListItem(
                             title = stringResource(R.string.inbox_title),
                             supportingText = stringResource(R.string.inbox_row_subtitle),
                             leadingIcon = Icons.Outlined.Inbox,
@@ -150,6 +211,26 @@ fun MoreScreen(
                         )
                     }
                 }
+                if (showAccountActions) {
+                    item {
+                        SectionCard(title = stringResource(R.string.more_section_account)) {
+                            AppListItem(
+                                title = stringResource(R.string.more_devices_title),
+                                supportingText = stringResource(R.string.more_devices_subtitle),
+                                leadingIcon = Icons.Outlined.PhoneAndroid,
+                                onClick = onOpenDevices,
+                                trailingContent = { Chevron() },
+                            )
+                            AppListItem(
+                                title = stringResource(R.string.more_logout),
+                                supportingText = stringResource(R.string.more_logout_subtitle),
+                                leadingIcon = Icons.AutoMirrored.Outlined.Logout,
+                                leadingIconTint = MaterialTheme.colorScheme.error,
+                                onClick = { showLogOutDialog = true },
+                            )
+                        }
+                    }
+                }
                 item {
                     SectionCard(title = stringResource(R.string.more_section_exit)) {
                         AppListItem(
@@ -162,6 +243,27 @@ fun MoreScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+/** Online-account state + sign-out; the More page itself stays stateless. */
+@HiltViewModel
+class MoreViewModel @Inject constructor(
+    settingsRepository: SettingsRepository,
+    private val authRepository: AuthRepository,
+) : ViewModel() {
+
+    val showAccountActions: StateFlow<Boolean> = combine(
+        settingsRepository.preferences,
+        authRepository.authState,
+    ) { preferences, user ->
+        preferences.appMode == AppMode.ONLINE && user != null
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    fun logOut() {
+        viewModelScope.launch {
+            runCatching { authRepository.signOut() }
         }
     }
 }

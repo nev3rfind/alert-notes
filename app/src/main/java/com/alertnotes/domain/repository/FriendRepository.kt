@@ -79,4 +79,23 @@ interface FriendRepository {
     suspend fun setFamilyPermissions(memberUid: String, permissions: FamilyPermissions)
 
     // endregion
+
+    // region Blocking
+
+    /** Users the signed-in user has blocked, with live profiles. */
+    val blockedUsers: Flow<List<FriendUser>>
+
+    /**
+     * Blocks [uid]: severs any friendship and family relationship, then
+     * records the block. Blocked users can't message, share reminders, or
+     * invite; search results hide them. Reminders already received stay.
+     */
+    suspend fun blockUser(uid: String)
+
+    suspend fun unblockUser(uid: String)
+
+    /** Cheap membership check for chat/sharing guards. */
+    suspend fun isBlocked(uid: String): Boolean
+
+    // endregion
 }

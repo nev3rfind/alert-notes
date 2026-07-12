@@ -109,6 +109,9 @@ class FriendsViewModel @Inject constructor(
         friendRepository.outgoingFamilyInvitations
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    val blocked: StateFlow<List<FriendUser>> = friendRepository.blockedUsers
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     private val _notice = MutableStateFlow<FriendError?>(null)
     val notice: StateFlow<FriendError?> = _notice.asStateFlow()
 
@@ -128,6 +131,10 @@ class FriendsViewModel @Inject constructor(
     fun cancel(requestId: String) = act { friendRepository.cancelRequest(requestId) }
 
     fun removeFriend(uid: String) = act { friendRepository.removeFriend(uid) }
+
+    fun block(uid: String) = act { friendRepository.blockUser(uid) }
+
+    fun unblock(uid: String) = act { friendRepository.unblockUser(uid) }
 
     /** Family always begins as a friend; the repository enforces it too. */
     fun inviteToFamily(uid: String) = act { friendRepository.inviteToFamily(uid, "") }
@@ -189,7 +196,9 @@ fun FriendsScreen(
     val family by viewModel.family.collectAsStateWithLifecycle()
     val incomingFamily by viewModel.incomingFamily.collectAsStateWithLifecycle()
     val outgoingFamily by viewModel.outgoingFamily.collectAsStateWithLifecycle()
+    val blocked by viewModel.blocked.collectAsStateWithLifecycle()
     val notice by viewModel.notice.collectAsStateWithLifecycle()
+    var pendingBlock by rememberSaveable { mutableStateOf<Pair<String, String>?>(null) }
 
     // Relationship badge for a search result, computed from the live lists.
     val badgeFor: @Composable (String) -> String? = { uid ->
@@ -335,6 +344,16 @@ fun FriendsScreen(
                                             color = MaterialTheme.colorScheme.error,
                                         )
                                     }
+                                    TextButton(
+                                        onClick = {
+                                            pendingBlock = friend.uid to friend.profile.displayName
+                                        },
+                                    ) {
+                                        Text(
+                                            text = stringResource(R.string.friends_block),
+                                            color = MaterialTheme.colorScheme.error,
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -361,11 +380,20 @@ fun FriendsScreen(
                 }
                 item {
                     SectionCard(title = stringResource(R.string.friends_section_blocked)) {
-                        AppListItem(
-                            title = stringResource(R.string.friends_blocked_placeholder),
-                            supportingText = stringResource(R.string.profile_coming_soon),
-                            leadingIcon = Icons.Outlined.Block,
-                        )
+                        if (blocked.isEmpty()) {
+                            EmptyHint(text = stringResource(R.string.friends_blocked_empty))
+                        } else {
+                            blocked.forEach { user ->
+                                PersonRow(
+                                    profile = user.profile,
+                                    onClick = {},
+                                ) {
+                                    TextButton(onClick = { viewModel.unblock(user.uid) }) {
+                                        Text(text = stringResource(R.string.friends_unblock))
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -374,6 +402,32 @@ fun FriendsScreen(
 
     notice?.let { error ->
         FriendNoticeDialog(error = error, onDismiss = viewModel::dismissNotice)
+    }
+    pendingBlock?.let { (uid, name) ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { pendingBlock = null },
+            shape = MaterialTheme.shapes.extraLarge,
+            title = { Text(text = stringResource(R.string.friends_block_confirm_title, name)) },
+            text = { Text(text = stringResource(R.string.friends_block_confirm_message)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.block(uid)
+                        pendingBlock = null
+                    },
+                ) {
+                    Text(
+                        text = stringResource(R.string.friends_block),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingBlock = null }) {
+                    Text(text = stringResource(R.string.action_cancel))
+                }
+            },
+        )
     }
 }
 

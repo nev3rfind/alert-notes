@@ -124,7 +124,11 @@ class ReminderSharingRepositoryImpl @Inject constructor(
         val payload = encodePayload(reminder)
         val scheduleSummary = scheduleSummaryOf(reminder)
         val familyMembers = friendRepository.family.first()
-        recipientUids.forEach { recipientUid ->
+        // Defence in depth: blocked users never appear in the picker, but a
+        // stale selection must not slip a share through either.
+        val recipients = recipientUids.filterNot { friendRepository.isBlocked(it) }
+        if (recipients.isEmpty()) throw FriendException(FriendError.PERMISSION)
+        recipients.forEach { recipientUid ->
             val familyMember = familyMembers.firstOrNull { it.uid == recipientUid }
             val autoDeliver = familyMember?.permissions?.autoReceiveReminders == true
             val relationship = if (familyMember != null) {
@@ -173,7 +177,7 @@ class ReminderSharingRepositoryImpl @Inject constructor(
         } else {
             SystemMessageKind.REMINDER_SHARED
         }
-        recipientUids.forEach { recipientUid ->
+        recipients.forEach { recipientUid ->
             val shareId = "${owner}_${reminder.id}_$recipientUid"
             narrate(
                 recipientUid,
@@ -195,7 +199,7 @@ class ReminderSharingRepositoryImpl @Inject constructor(
                 dedupeKey = "share_${shareId}_invite",
             )
         }
-        logger.i(TAG, "Reminder shared with ${recipientUids.size} recipient(s) as $ownership")
+        logger.i(TAG, "Reminder shared with ${recipients.size} recipient(s) as $ownership")
     }
 
     override suspend fun acceptShare(share: ReminderShare) = runShareOp {

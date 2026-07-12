@@ -13,6 +13,7 @@ import javax.inject.Singleton
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
 
 /**
@@ -90,6 +91,41 @@ class DeviceRemoteDataSource @Inject constructor(
             .document(currentDeviceId())
             .set(mapOf("pushToken" to null), SetOptions.merge())
             .await()
+    }
+
+    /** One registered login, straight from `users/{uid}/devices`. */
+    data class ConnectedDevice(
+        val deviceId: String,
+        val name: String,
+        val model: String,
+        val androidVersion: String,
+        val appVersion: String,
+        val lastSeen: java.time.Instant?,
+        val isCurrentDevice: Boolean,
+    )
+
+    /** Every device signed in to the account, current one first. */
+    fun observeDevices(uid: String): Flow<List<ConnectedDevice>> = callbackFlow {
+        val registration = firestore.collection(FirestoreSchema.USERS)
+            .document(uid)
+            .collection(FirestoreSchema.DEVICES)
+            .addSnapshotListener { snapshot, error ->
+                trySend(if (error != null) emptyList() else snapshot?.documents.orEmpty())
+            }
+        awaitClose { registration.remove() }
+    }.map { documents ->
+        val current = currentDeviceId()
+        documents.map { doc ->
+            ConnectedDevice(
+                deviceId = doc.id,
+                name = doc.getString("deviceName").orEmpty().ifBlank { doc.getString("model").orEmpty() },
+                model = doc.getString("model").orEmpty(),
+                androidVersion = doc.getString("androidVersion").orEmpty(),
+                appVersion = doc.getString("appVersion").orEmpty(),
+                lastSeen = doc.getTimestamp("lastSeen")?.toDate()?.toInstant(),
+                isCurrentDevice = doc.id == current,
+            )
+        }.sortedByDescending { it.isCurrentDevice }
     }
 
     /** Live count of registered devices; drives the profile dashboard. */

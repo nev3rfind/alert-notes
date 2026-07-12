@@ -125,7 +125,17 @@ class FriendRepositoryImpl @Inject constructor(
                 byUid[uid] = doc.toPublicProfile()
             }
         }
-        byUid.map { (uid, profile) -> FriendUser(uid = uid, profile = profile) }
+        // Blocked users never surface in search — in either direction the
+        // relationship is over (their side is enforced by the rules).
+        val blocked = selfUid?.let { me ->
+            runCatching {
+                firestore.collection(FirestoreSchema.USERS).document(me)
+                    .collection(FirestoreSchema.BLOCKED)
+                    .get().await().documents.map { it.id }.toSet()
+            }.getOrDefault(emptySet())
+        }.orEmpty()
+        byUid.filterKeys { it !in blocked }
+            .map { (uid, profile) -> FriendUser(uid = uid, profile = profile) }
     }
 
     override fun observePublicProfile(uid: String): Flow<PublicProfile?> = callbackFlow {
@@ -150,6 +160,8 @@ class FriendRepositoryImpl @Inject constructor(
     override suspend fun sendRequest(toUid: String) = runFriendOp {
         val me = requireUid()
         if (toUid == me) throw FriendException(FriendError.SELF_REQUEST)
+        // Requests to someone you blocked make no sense; unblock first.
+        if (isBlocked(toUid)) throw FriendException(FriendError.PERMISSION)
         if (friendEdge(me, toUid).get().await().exists()) {
             throw FriendException(FriendError.ALREADY_FRIENDS)
         }
@@ -366,6 +378,56 @@ class FriendRepositoryImpl @Inject constructor(
             .await()
         Unit
     }
+
+    // region Blocking
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override val blockedUsers: Flow<List<FriendUser>> =
+        authRepository.authState.flatMapLatest { user ->
+            if (user == null) flowOf(emptyList()) else blockedEdges(user.uid)
+        }
+
+    override suspend fun blockUser(uid: String) = runFriendOp {
+        val me = requireUid()
+        if (uid == me) throw FriendException(FriendError.SELF_REQUEST)
+        // Sever the relationships first — best-effort so the block itself
+        // always lands even if an edge is already gone.
+        runCatching { removeFamilyMember(uid) }
+        runCatching { removeFriend(uid) }
+        blockedDocument(me, uid).set(
+            mapOf("uid" to uid, "since" to FieldValue.serverTimestamp()),
+        ).await()
+        logger.i(TAG, "User blocked")
+    }
+
+    override suspend fun unblockUser(uid: String) = runFriendOp {
+        blockedDocument(requireUid(), uid).delete().await()
+        Unit
+    }
+
+    override suspend fun isBlocked(uid: String): Boolean = runCatching {
+        val me = auth.currentUser?.uid ?: return false
+        blockedDocument(me, uid).get().await().exists()
+    }.getOrDefault(false)
+
+    private fun blockedDocument(me: String, uid: String) =
+        firestore.collection(FirestoreSchema.USERS).document(me)
+            .collection(FirestoreSchema.BLOCKED).document(uid)
+
+    private fun blockedEdges(me: String): Flow<List<FriendUser>> = callbackFlow {
+        val registration = firestore.collection(FirestoreSchema.USERS).document(me)
+            .collection(FirestoreSchema.BLOCKED)
+            .addSnapshotListener { snapshot, error ->
+                trySend(if (error != null) emptyList() else snapshot?.documents.orEmpty())
+            }
+        awaitClose { registration.remove() }
+    }.map { documents ->
+        documents.mapNotNull { doc ->
+            publicProfileOf(doc.id)?.let { FriendUser(uid = doc.id, profile = it) }
+        }
+    }
+
+    // endregion
 
     private fun familyEdges(uid: String): Flow<List<FamilyMember>> = callbackFlow {
         val registration = firestore.collection(FirestoreSchema.USERS).document(uid)

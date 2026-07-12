@@ -112,6 +112,12 @@ fun AlertNotesNavHost(
                 reminderId = route.reminderId,
                 initialEpochDay = route.initialEpochDay,
                 onClose = navController::navigateUp,
+                // New reminders saved in online mode flow straight into the
+                // "who should receive this?" chooser, preselected.
+                onShareSaved = { savedId ->
+                    navController.popBackStack()
+                    navController.navigate(ShareReminderRoute(savedId))
+                },
             )
         }
         composable<ProfileRoute> {
@@ -128,7 +134,9 @@ fun AlertNotesNavHost(
                 onOpenDiagnostics = { navController.navigate(ReliabilityRoute) },
                 onOpenInbox = { navController.navigate(InboxRoute) },
                 onOpenNotifications = { navController.navigate(NotificationCentreRoute) },
-                onOpenShareReminder = { navController.navigate(ShareReminderRoute) },
+                onOpenMessages = { navController.navigate(MessagesRoute) },
+                onOpenDevices = { navController.navigate(ConnectedDevicesRoute) },
+                onOpenShareReminder = { navController.navigate(ShareReminderRoute()) },
                 onOpenSharedReminders = { navController.navigate(SharedRemindersRoute) },
                 onExit = onExit,
             )
@@ -164,8 +172,11 @@ fun AlertNotesNavHost(
         composable<ReliabilityRoute> {
             ReliabilityScreen(onNavigateBack = navController::navigateUp)
         }
-        composable<ShareReminderRoute> {
-            ShareReminderScreen(onNavigateBack = navController::navigateUp)
+        composable<ShareReminderRoute> { entry ->
+            ShareReminderScreen(
+                onNavigateBack = navController::navigateUp,
+                initialReminderId = entry.toRoute<ShareReminderRoute>().reminderId,
+            )
         }
         composable<SharedRemindersRoute> {
             SharedRemindersScreen(
@@ -180,6 +191,11 @@ fun AlertNotesNavHost(
                 onOpenSharedReminders = { navController.navigate(SharedRemindersRoute) },
                 onOpenFriends = { navController.navigateToTopLevel(FriendsRoute) },
                 onOpenMessages = { navController.navigateToTopLevel(MessagesRoute) },
+            )
+        }
+        composable<ConnectedDevicesRoute> {
+            com.alertnotes.features.account.ConnectedDevicesScreen(
+                onNavigateBack = navController::navigateUp,
             )
         }
         composable<NotificationCentreRoute> {

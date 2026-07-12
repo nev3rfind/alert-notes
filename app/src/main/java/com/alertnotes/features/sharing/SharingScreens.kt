@@ -144,6 +144,7 @@ class ShareReminderViewModel @Inject constructor(
 @Composable
 fun ShareReminderScreen(
     onNavigateBack: () -> Unit,
+    initialReminderId: Long = -1L,
     viewModel: ShareReminderViewModel = hiltViewModel(),
 ) {
     val reminders by viewModel.reminders.collectAsStateWithLifecycle()
@@ -152,7 +153,9 @@ fun ShareReminderScreen(
     val sent by viewModel.sent.collectAsStateWithLifecycle()
     val notice by viewModel.notice.collectAsStateWithLifecycle()
 
-    var selectedReminderId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var selectedReminderId by rememberSaveable {
+        mutableStateOf(initialReminderId.takeIf { it > 0 })
+    }
     var selectedUids by rememberSaveable { mutableStateOf(setOf<String>()) }
     var ownership by rememberSaveable { mutableStateOf(ReminderOwnership.ME_AND_RECIPIENTS) }
 
