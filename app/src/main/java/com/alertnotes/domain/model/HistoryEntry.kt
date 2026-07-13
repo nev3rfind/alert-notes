@@ -10,6 +10,12 @@ enum class AcknowledgeMethod {
     TICK_GESTURE,
     SIGNATURE,
     CHECKLIST,
+
+    /** Live camera proof captured at dismissal. */
+    PHOTO,
+
+    /** High-accuracy location proof captured at dismissal. */
+    LOCATION,
     AUTO,
     NOTIFICATION,
     SNOOZE,

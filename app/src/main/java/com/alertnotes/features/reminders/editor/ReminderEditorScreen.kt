@@ -57,10 +57,11 @@ fun ReminderEditorScreen(
     reminderId: Long,
     onClose: () -> Unit,
     initialEpochDay: Long = -1,
+    onShareSaved: ((Long) -> Unit)? = null,
 ) {
     val viewModel = rememberEditorViewModel(reminderId, initialEpochDay)
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val session = rememberEditorSession(viewModel, onClose)
+    val session = rememberEditorSession(viewModel, onClose, onShareSaved)
     val editing = uiState as? EditorUiState.Editing
 
     BackHandler(enabled = editing?.isDirty == true) {
@@ -212,6 +213,7 @@ private class EditorSession(
 private fun rememberEditorSession(
     viewModel: ReminderEditorViewModel,
     onClose: () -> Unit,
+    onShareSaved: ((Long) -> Unit)? = null,
 ): EditorSession {
     val showDiscardDialog = rememberSaveable { mutableStateOf(false) }
     val showDeleteDialog = rememberSaveable { mutableStateOf(false) }
@@ -220,7 +222,12 @@ private fun rememberEditorSession(
     }
     val isFinished by viewModel.isFinished.collectAsStateWithLifecycle()
     LaunchedEffect(isFinished) {
-        if (isFinished) onClose()
+        if (isFinished) {
+            // A brand-new reminder saved in online mode flows into the
+            // "who should receive this?" chooser when the host supports it.
+            val shareId = viewModel.savedForSharing.value
+            if (shareId != null && onShareSaved != null) onShareSaved(shareId) else onClose()
+        }
     }
     return session
 }
@@ -242,7 +249,7 @@ private fun EditorActions(
     ) {
         Text(text = stringResource(R.string.action_save))
     }
-    if (editing?.isNew == false) {
+    if (editing != null) {
         var menuExpanded by remember { mutableStateOf(false) }
         Box {
             IconButton(onClick = { menuExpanded = true }) {
@@ -253,15 +260,31 @@ private fun EditorActions(
             }
             DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
                 DropdownMenuItem(
-                    text = { Text(text = stringResource(R.string.action_duplicate)) },
+                    text = { Text(text = stringResource(R.string.editor_save_as_template)) },
                     leadingIcon = {
-                        Icon(imageVector = Icons.Outlined.ContentCopy, contentDescription = null)
+                        Icon(
+                            imageVector = androidx.compose.material.icons.Icons.Outlined.ContentCopy,
+                            contentDescription = null,
+                        )
                     },
+                    enabled = editing.validation.isValid,
                     onClick = {
                         menuExpanded = false
-                        viewModel.duplicate(copyTitle)
+                        viewModel.saveAsTemplate()
                     },
                 )
+                if (!editing.isNew) {
+                    DropdownMenuItem(
+                        text = { Text(text = stringResource(R.string.action_duplicate)) },
+                        leadingIcon = {
+                            Icon(imageVector = Icons.Outlined.ContentCopy, contentDescription = null)
+                        },
+                        onClick = {
+                            menuExpanded = false
+                            viewModel.duplicate(copyTitle)
+                        },
+                    )
+                }
             }
         }
     }

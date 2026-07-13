@@ -6,7 +6,9 @@ import com.alertnotes.core.util.AppLogger
 import com.alertnotes.core.util.TimeProvider
 import com.alertnotes.domain.model.Reminder
 import com.alertnotes.domain.model.ReminderPriority
+import com.alertnotes.domain.model.ReminderShareWithProfile
 import com.alertnotes.domain.model.ReminderStats
+import com.alertnotes.domain.model.ShareStatus
 import com.alertnotes.domain.repository.ReminderQueueRepository
 import com.alertnotes.domain.repository.ReminderRepository
 import com.alertnotes.domain.repository.SettingsRepository
@@ -26,6 +28,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 
@@ -48,6 +51,16 @@ data class HomeSchedule(
     val monthDaysWithReminders: Set<LocalDate> = emptySet(),
     val month: YearMonth = YearMonth.now(),
 )
+
+/** Cloud activity counters for the dashboard; all zero when offline. */
+data class SharingPulse(
+    val pendingInvitations: Int = 0,
+    val unreadMessages: Int = 0,
+    val unreadNotifications: Int = 0,
+) {
+    val isEmpty: Boolean
+        get() = pendingInvitations == 0 && unreadMessages == 0 && unreadNotifications == 0
+}
 
 /** Everything the dashboard renders, derived live from the database. */
 data class HomeUiState(
@@ -75,10 +88,52 @@ class HomeViewModel @Inject constructor(
     reminderRepository: ReminderRepository,
     queueRepository: ReminderQueueRepository,
     settingsRepository: SettingsRepository,
+    friendRepository: com.alertnotes.domain.repository.FriendRepository,
+    sharingRepository: com.alertnotes.domain.repository.ReminderSharingRepository,
+    chatRepository: com.alertnotes.domain.repository.ChatRepository,
+    notificationCentre: com.alertnotes.domain.repository.NotificationCentreRepository,
     projector: OccurrenceProjector,
     timeProvider: TimeProvider,
     logger: AppLogger,
 ) : ViewModel() {
+
+    /** Invitations, unread messages, unread notifications — one glance. */
+    val sharingPulse: StateFlow<SharingPulse> = combine(
+        friendRepository.incomingRequests,
+        friendRepository.incomingFamilyInvitations,
+        sharingRepository.incomingShares,
+        chatRepository.totalUnread,
+        notificationCentre.unreadCount,
+    ) { requests, invitations, incoming, unreadMessages, unreadNotifications ->
+        SharingPulse(
+            pendingInvitations = requests.size + invitations.size +
+                incoming.count { it.share.status == ShareStatus.PENDING },
+            unreadMessages = unreadMessages,
+            unreadNotifications = unreadNotifications,
+        )
+    }
+        .catch { emit(SharingPulse()) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SharingPulse())
+
+    /** Live shares I sent, most recent first — the dashboard preview. */
+    val sharedByMe: StateFlow<List<ReminderShareWithProfile>> = sharingRepository.outgoingShares
+        .map { shares -> shares.filter { it.share.status in LIVE_SHARE_STATUSES }.take(DASHBOARD_PREVIEW_COUNT) }
+        .catch { emit(emptyList()) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Live shares addressed to me. */
+    val sharedWithMe: StateFlow<List<ReminderShareWithProfile>> = sharingRepository.incomingShares
+        .map { shares -> shares.filter { it.share.status in LIVE_SHARE_STATUSES }.take(DASHBOARD_PREVIEW_COUNT) }
+        .catch { emit(emptyList()) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Shares I sent that ran to completion — the accountability receipt. */
+    val recentlyCompleted: StateFlow<List<ReminderShareWithProfile>> = sharingRepository.outgoingShares
+        .map { shares ->
+            shares.filter { it.share.status == ShareStatus.COMPLETED }.take(DASHBOARD_PREVIEW_COUNT)
+        }
+        .catch { emit(emptyList()) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private val queuePanel = queueRepository.observePending()
         .mapLatest { pending ->
@@ -168,5 +223,14 @@ class HomeViewModel @Inject constructor(
         const val DASHBOARD_PREVIEW_COUNT = 3
         const val QUEUE_PANEL_LIMIT = 6
         const val TODAY_SCHEDULE_LIMIT = 4
+
+        /** Everything still moving; terminal shares stay on the dashboard's tracking screen only. */
+        val LIVE_SHARE_STATUSES = setOf(
+            ShareStatus.PENDING,
+            ShareStatus.ACCEPTED,
+            ShareStatus.DELIVERED,
+            ShareStatus.SCHEDULED,
+            ShareStatus.TRIGGERED,
+        )
     }
 }

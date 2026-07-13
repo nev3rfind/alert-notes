@@ -18,6 +18,15 @@ interface ReminderHistoryRepository {
     /** Most recent entries first (bounded). */
     fun observeHistory(): Flow<List<HistoryEntry>>
 
+    /**
+     * The latest resolved (acknowledged/completed) firing of one reminder;
+     * the sharing layer mirrors it to the reminder's owner.
+     */
+    suspend fun latestResolved(reminderId: Long): HistoryEntry?
+
+    /** The newest entry alone — a cheap change signal for sync sweeps. */
+    fun observeLatest(): Flow<HistoryEntry?>
+
     suspend fun recordTriggered(reminder: Reminder, at: Instant)
 
     /**

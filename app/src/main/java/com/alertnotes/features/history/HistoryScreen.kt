@@ -328,6 +328,8 @@ fun AcknowledgeMethod.labelRes(): Int = when (this) {
     AcknowledgeMethod.SWIPE -> R.string.ack_swipe
     AcknowledgeMethod.TICK_GESTURE -> R.string.ack_tick
     AcknowledgeMethod.SIGNATURE -> R.string.ack_signature
+    AcknowledgeMethod.PHOTO -> R.string.ack_photo
+    AcknowledgeMethod.LOCATION -> R.string.ack_location
     AcknowledgeMethod.AUTO -> R.string.method_auto
     AcknowledgeMethod.NOTIFICATION -> R.string.method_notification
     AcknowledgeMethod.SNOOZE -> R.string.method_snooze

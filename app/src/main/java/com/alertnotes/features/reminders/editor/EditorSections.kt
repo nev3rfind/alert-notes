@@ -23,6 +23,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -123,6 +124,21 @@ fun GeneralSection(
                     selected = draft.priority,
                     onSelect = { priority -> onUpdate { it.copy(priority = priority) } },
                     label = { stringResource(it.labelRes()) },
+                )
+            }
+            AnimatedVisibility(
+                visible = draft.priority == ReminderPriority.CRITICAL,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut(),
+            ) {
+                Text(
+                    text = stringResource(R.string.editor_critical_explanation),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(
+                        horizontal = MaterialTheme.spacing.large,
+                        vertical = MaterialTheme.spacing.extraSmall,
+                    ),
                 )
             }
         }
@@ -591,6 +607,13 @@ fun AlertsSection(
             checked = draft.soundEnabled,
             onCheckedChange = { value -> onUpdate { it.copy(soundEnabled = value) } },
         )
+        AnimatedVisibility(
+            visible = draft.soundEnabled,
+            enter = expandVertically() + fadeIn(),
+            exit = shrinkVertically() + fadeOut(),
+        ) {
+            SoundPreviewRow(priority = draft.priority)
+        }
         AppToggleRow(
             title = stringResource(R.string.editor_history),
             supportingText = stringResource(R.string.editor_history_subtitle),
@@ -675,8 +698,53 @@ fun ReminderType.labelRes(): Int = when (this) {
     ReminderType.CHECKLIST -> R.string.type_checklist
 }
 
+/**
+ * Which bundled sound this priority rings with, and a live preview button.
+ * Critical always carries the dedicated alarm; everything else uses the
+ * Alert Notes signature sound.
+ */
+@Composable
+private fun SoundPreviewRow(priority: ReminderPriority) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val soundRes = if (priority == ReminderPriority.CRITICAL) {
+        R.raw.alert_critical
+    } else {
+        R.raw.sound_noti
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = MaterialTheme.spacing.large),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = stringResource(
+                if (priority == ReminderPriority.CRITICAL) {
+                    R.string.editor_sound_critical
+                } else {
+                    R.string.editor_sound_default
+                },
+            ),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
+        )
+        TextButton(
+            onClick = {
+                android.media.MediaPlayer.create(context, soundRes)?.apply {
+                    setOnCompletionListener { it.release() }
+                    start()
+                }
+            },
+        ) {
+            Text(text = stringResource(R.string.editor_sound_preview))
+        }
+    }
+}
+
 @StringRes
 fun ReminderPriority.labelRes(): Int = when (this) {
+    ReminderPriority.LOW -> R.string.priority_low
     ReminderPriority.NORMAL -> R.string.priority_normal
     ReminderPriority.HIGH -> R.string.priority_high
     ReminderPriority.CRITICAL -> R.string.priority_critical
@@ -713,6 +781,8 @@ fun AcknowledgementType.labelRes(): Int = when (this) {
     AcknowledgementType.SWIPE -> R.string.ack_swipe
     AcknowledgementType.TICK_GESTURE -> R.string.ack_tick
     AcknowledgementType.SIGNATURE -> R.string.ack_signature
+    AcknowledgementType.PHOTO -> R.string.ack_photo
+    AcknowledgementType.LOCATION -> R.string.ack_location
 }
 
 @StringRes

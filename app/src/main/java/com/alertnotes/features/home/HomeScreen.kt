@@ -18,22 +18,36 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
+import androidx.compose.material.icons.outlined.Diversity3
 import androidx.compose.material.icons.outlined.FolderZip
+import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material.icons.outlined.Notifications
-import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.NotificationsNone
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -57,7 +71,10 @@ import com.alertnotes.core.ui.components.SectionCard
 import com.alertnotes.core.ui.theme.spacing
 import com.alertnotes.domain.model.Reminder
 import com.alertnotes.domain.model.UserPreferences
+import com.alertnotes.features.account.ConnectionStatusCard
 import com.alertnotes.features.alerts.AlertIconBadge
+import com.alertnotes.features.friends.FriendAvatar
+import com.alertnotes.features.sharing.StatusChip
 import com.alertnotes.features.alerts.alertAccentColor
 import com.alertnotes.features.alerts.staticBrush
 import com.alertnotes.features.reminders.editor.labelRes
@@ -79,13 +96,41 @@ fun HomeScreen(
     onCreateReminder: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenBackup: () -> Unit,
+    onOpenFriends: () -> Unit,
+    onOpenSharedReminders: () -> Unit,
+    onOpenInbox: () -> Unit,
+    onOpenMessages: () -> Unit,
+    onOpenNotifications: () -> Unit,
+    onOpenSendReminder: () -> Unit,
+    onOpenTemplates: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val sharingPulse by viewModel.sharingPulse.collectAsStateWithLifecycle()
+    val sharedByMe by viewModel.sharedByMe.collectAsStateWithLifecycle()
+    val sharedWithMe by viewModel.sharedWithMe.collectAsStateWithLifecycle()
+    val recentlyCompleted by viewModel.recentlyCompleted.collectAsStateWithLifecycle()
 
     Scaffold(
-        topBar = { AppTopBar(title = stringResource(R.string.app_name)) },
+        topBar = {
+            AppTopBar(
+                title = stringResource(R.string.app_name),
+                actions = {
+                    com.alertnotes.core.ui.components.NotificationBellAction(
+                        onOpen = onOpenNotifications,
+                    )
+                },
+            )
+        },
         containerColor = MaterialTheme.colorScheme.background,
+        floatingActionButton = {
+            QuickActionsFab(
+                onCreateReminder = onCreateReminder,
+                onSendReminder = onOpenSendReminder,
+                onUseTemplate = onOpenTemplates,
+                onSendMessage = onOpenMessages,
+            )
+        },
     ) { innerPadding ->
         Box(
             modifier = Modifier
@@ -107,6 +152,51 @@ fun HomeScreen(
             ) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     DashboardHeader()
+                }
+                // Shared Activity leads the dashboard — the online edition's
+                // core feature is visible before anything else.
+                if (!sharingPulse.isEmpty) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        SharingPulseRow(
+                            pulse = sharingPulse,
+                            onOpenInbox = onOpenInbox,
+                            onOpenMessages = onOpenMessages,
+                            onOpenNotifications = onOpenNotifications,
+                        )
+                    }
+                }
+                if (sharedByMe.isNotEmpty()) {
+                    item {
+                        SharedRemindersCard(
+                            titleRes = R.string.home_shared_by_me,
+                            shares = sharedByMe,
+                            onOpen = onOpenSharedReminders,
+                        )
+                    }
+                }
+                if (sharedWithMe.isNotEmpty()) {
+                    item {
+                        SharedRemindersCard(
+                            titleRes = R.string.home_shared_with_me,
+                            shares = sharedWithMe,
+                            onOpen = onOpenSharedReminders,
+                        )
+                    }
+                }
+                if (recentlyCompleted.isNotEmpty()) {
+                    item {
+                        SharedRemindersCard(
+                            titleRes = R.string.home_recently_completed,
+                            shares = recentlyCompleted,
+                            onOpen = onOpenSharedReminders,
+                        )
+                    }
+                }
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    ConnectionStatusCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = onOpenSettings,
+                    )
                 }
                 uiState.pausedUntil?.let { pausedUntil ->
                     item(span = { GridItemSpan(maxLineSpan) }) {
@@ -157,8 +247,9 @@ fun HomeScreen(
                 item {
                     QuickActionsCard(
                         onCreateReminder = onCreateReminder,
+                        onOpenFriends = onOpenFriends,
+                        onOpenCalendar = onOpenCalendar,
                         onOpenBackup = onOpenBackup,
-                        onOpenSettings = onOpenSettings,
                     )
                 }
                 item {
@@ -168,6 +259,263 @@ fun HomeScreen(
         }
     }
 }
+
+// region Quick actions FAB
+
+/**
+ * The global "+" button: one tap fans out the four fastest paths — create
+ * a reminder, send one, start from a template, or message someone. Labels
+ * ride beside small FABs; the plus rotates into a close affordance.
+ */
+@Composable
+private fun QuickActionsFab(
+    onCreateReminder: () -> Unit,
+    onSendReminder: () -> Unit,
+    onUseTemplate: () -> Unit,
+    onSendMessage: () -> Unit,
+) {
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    val rotation by animateFloatAsState(
+        targetValue = if (expanded) 45f else 0f,
+        label = "fabRotation",
+    )
+    Column(horizontalAlignment = Alignment.End) {
+        androidx.compose.animation.AnimatedVisibility(
+            visible = expanded,
+            enter = androidx.compose.animation.fadeIn() +
+                androidx.compose.animation.expandVertically(expandFrom = Alignment.Bottom),
+            exit = androidx.compose.animation.fadeOut() +
+                androidx.compose.animation.shrinkVertically(shrinkTowards = Alignment.Bottom),
+        ) {
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
+            ) {
+                QuickActionRow(
+                    labelRes = R.string.quick_action_create,
+                    icon = Icons.Filled.Add,
+                    onClick = { expanded = false; onCreateReminder() },
+                )
+                QuickActionRow(
+                    labelRes = R.string.quick_action_send,
+                    icon = Icons.Outlined.Notifications,
+                    onClick = { expanded = false; onSendReminder() },
+                )
+                QuickActionRow(
+                    labelRes = R.string.quick_action_template,
+                    icon = androidx.compose.material.icons.Icons.Outlined.Bookmark,
+                    onClick = { expanded = false; onUseTemplate() },
+                )
+                QuickActionRow(
+                    labelRes = R.string.quick_action_message,
+                    icon = androidx.compose.material.icons.Icons.Outlined.ChatBubbleOutline,
+                    onClick = { expanded = false; onSendMessage() },
+                )
+                Spacer(modifier = Modifier.height(MaterialTheme.spacing.small))
+            }
+        }
+        androidx.compose.material3.FloatingActionButton(
+            onClick = { expanded = !expanded },
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Add,
+                contentDescription = stringResource(
+                    if (expanded) R.string.quick_action_close else R.string.quick_action_open,
+                ),
+                modifier = Modifier.graphicsLayer { rotationZ = rotation },
+            )
+        }
+    }
+}
+
+@Composable
+private fun QuickActionRow(
+    labelRes: Int,
+    icon: ImageVector,
+    onClick: () -> Unit,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Surface(
+            shape = MaterialTheme.shapes.medium,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            shadowElevation = 2.dp,
+        ) {
+            Text(
+                text = stringResource(labelRes),
+                style = MaterialTheme.typography.labelMedium,
+                modifier = Modifier.padding(
+                    horizontal = MaterialTheme.spacing.medium,
+                    vertical = MaterialTheme.spacing.extraSmall,
+                ),
+            )
+        }
+        Spacer(modifier = Modifier.width(MaterialTheme.spacing.small))
+        androidx.compose.material3.SmallFloatingActionButton(
+            onClick = onClick,
+            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+            contentColor = MaterialTheme.colorScheme.primary,
+        ) {
+            Icon(imageVector = icon, contentDescription = null)
+        }
+    }
+}
+
+// endregion
+
+// region Sharing dashboard cards
+
+/**
+ * One glance at everything social: pending invitations, unread messages,
+ * unread notifications — each tile a shortcut to its surface. Hidden
+ * entirely when all counters are zero (and always in offline mode).
+ */
+@Composable
+private fun SharingPulseRow(
+    pulse: SharingPulse,
+    onOpenInbox: () -> Unit,
+    onOpenMessages: () -> Unit,
+    onOpenNotifications: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.medium),
+    ) {
+        PulseTile(
+            count = pulse.pendingInvitations,
+            labelRes = R.string.home_pulse_invitations,
+            icon = Icons.Outlined.Inbox,
+            onClick = onOpenInbox,
+            modifier = Modifier.weight(1f),
+        )
+        PulseTile(
+            count = pulse.unreadMessages,
+            labelRes = R.string.home_pulse_messages,
+            icon = Icons.Outlined.ChatBubbleOutline,
+            onClick = onOpenMessages,
+            modifier = Modifier.weight(1f),
+        )
+        PulseTile(
+            count = pulse.unreadNotifications,
+            labelRes = R.string.home_pulse_notifications,
+            icon = Icons.Outlined.NotificationsNone,
+            onClick = onOpenNotifications,
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+@Composable
+private fun PulseTile(
+    count: Int,
+    labelRes: Int,
+    icon: ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val active = count > 0
+    Surface(
+        onClick = onClick,
+        shape = MaterialTheme.shapes.large,
+        color = if (active) {
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerLow
+        },
+        modifier = modifier,
+    ) {
+        Column(
+            modifier = Modifier.padding(MaterialTheme.spacing.large),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (active) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
+            Text(
+                text = count.toString(),
+                style = MaterialTheme.typography.titleLarge,
+                color = if (active) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                },
+            )
+            Text(
+                text = stringResource(labelRes),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+/** Live shared reminders (sent or received) with avatars and status. */
+@Composable
+private fun SharedRemindersCard(
+    titleRes: Int,
+    shares: List<com.alertnotes.domain.model.ReminderShareWithProfile>,
+    onOpen: () -> Unit,
+) {
+    SectionCard(title = stringResource(titleRes)) {
+        shares.forEach { item ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onOpen)
+                    .padding(
+                        horizontal = MaterialTheme.spacing.large,
+                        vertical = MaterialTheme.spacing.small,
+                    ),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                FriendAvatar(profile = item.profile, size = 32.dp)
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = MaterialTheme.spacing.medium),
+                ) {
+                    Text(
+                        text = item.share.title,
+                        style = MaterialTheme.typography.titleSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = listOf(item.profile.displayName, item.share.scheduleSummary)
+                            .filter { it.isNotBlank() }
+                            .joinToString(" · "),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                StatusChip(status = item.share.status)
+            }
+        }
+        SecondaryButton(
+            text = stringResource(R.string.home_shared_open_all),
+            onClick = onOpen,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(
+                    horizontal = MaterialTheme.spacing.large,
+                    vertical = MaterialTheme.spacing.small,
+                ),
+        )
+    }
+}
+
+// endregion
 
 // region Header & hero cards
 
@@ -620,8 +968,9 @@ private fun StatTile(value: Int, label: String) {
 @Composable
 private fun QuickActionsCard(
     onCreateReminder: () -> Unit,
+    onOpenFriends: () -> Unit,
+    onOpenCalendar: () -> Unit,
     onOpenBackup: () -> Unit,
-    onOpenSettings: () -> Unit,
 ) {
     SectionCard(
         title = stringResource(R.string.home_quick_actions_title),
@@ -634,15 +983,27 @@ private fun QuickActionsCard(
         )
         CardDivider()
         QuickActionRow(
-            icon = Icons.Outlined.FolderZip,
-            text = stringResource(R.string.home_action_backup),
-            onClick = onOpenBackup,
+            icon = Icons.Outlined.Group,
+            text = stringResource(R.string.home_action_find_friends),
+            onClick = onOpenFriends,
         )
         CardDivider()
         QuickActionRow(
-            icon = Icons.Outlined.Settings,
-            text = stringResource(R.string.home_action_settings),
-            onClick = onOpenSettings,
+            icon = Icons.Outlined.Diversity3,
+            text = stringResource(R.string.home_action_invite_family),
+            onClick = onOpenFriends,
+        )
+        CardDivider()
+        QuickActionRow(
+            icon = Icons.Outlined.CalendarMonth,
+            text = stringResource(R.string.home_calendar_preview),
+            onClick = onOpenCalendar,
+        )
+        CardDivider()
+        QuickActionRow(
+            icon = Icons.Outlined.FolderZip,
+            text = stringResource(R.string.home_action_backup),
+            onClick = onOpenBackup,
         )
     }
 }

@@ -12,8 +12,12 @@ enum class ReminderType {
  * it must remain stable even if enum entries are ever reordered.
  */
 enum class ReminderPriority(val rank: Int) {
+    /** Subtle: muted accent, standard notification, no special effects. */
+    LOW(-1),
     NORMAL(0),
     HIGH(1),
+
+    /** Red warning identity, attention effects, dedicated critical sound. */
     CRITICAL(2),
 }
 
@@ -31,6 +35,12 @@ enum class AcknowledgementType {
     SWIPE,
     TICK_GESTURE,
     SIGNATURE,
+
+    /** A live camera capture is the proof; gallery uploads are impossible. */
+    PHOTO,
+
+    /** A high-accuracy location fix is the proof. */
+    LOCATION,
 }
 
 /**

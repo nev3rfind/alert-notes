@@ -19,6 +19,16 @@ interface ReminderHistoryDao {
     @Query("SELECT * FROM reminder_history ORDER BY triggered_at ASC")
     suspend fun getAllForBackup(): List<ReminderHistoryEntity>
 
+    /** Latest resolved firing of one reminder — acknowledgement mirroring. */
+    @Query(
+        """
+        SELECT * FROM reminder_history
+        WHERE reminder_id = :reminderId AND dismissed_at IS NOT NULL
+        ORDER BY dismissed_at DESC LIMIT 1
+        """,
+    )
+    suspend fun latestResolved(reminderId: Long): ReminderHistoryEntity?
+
     /** Resolves the newest still-open entry for the reminder. */
     @Query(
         """

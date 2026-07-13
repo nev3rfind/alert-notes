@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "715123181392",
+    "project_id": "alert-notes-bb0ba",
+    "storage_bucket": "alert-notes-bb0ba.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:715123181392:android:589d305313543d40d08e55",
+        "android_client_info": {
+          "package_name": "com.alertnotes"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBSuzsF3m_2HIosII0OXsckg-aU4aaj5G0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:715123181392:android:a972e1823439bc19d08e55",
+        "android_client_info": {
+          "package_name": "com.alertnotes.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBSuzsF3m_2HIosII0OXsckg-aU4aaj5G0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

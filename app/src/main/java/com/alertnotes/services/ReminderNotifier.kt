@@ -4,8 +4,6 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
-import android.media.AudioAttributes
-import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.alertnotes.AlertActivity
@@ -29,6 +27,7 @@ import javax.inject.Singleton
 class ReminderNotifier @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val logger: AppLogger,
+    private val diagnostics: ReliabilityDiagnostics,
 ) {
 
     /** Entry that last made noise; re-posts of it stay silent. */
@@ -36,6 +35,15 @@ class ReminderNotifier @Inject constructor(
 
     fun ensureChannels() {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
+        // Superseded channel generations. v1 carried the system alarm tone;
+        // v2 carried bundled sounds via resource-ID URIs — which do not
+        // survive app updates (ids are build-specific) and cannot be fixed
+        // in place because channel settings are immutable once created.
+        // Audio now lives in AlertSoundPlayer (started by the dispatcher on
+        // every surface), so the v3 channels are deliberately silent.
+        manager.deleteNotificationChannel(CHANNEL_ALERTS_LEGACY)
+        manager.deleteNotificationChannel(CHANNEL_ALERTS_V2)
+        manager.deleteNotificationChannel(CHANNEL_CRITICAL_V2)
         manager.createNotificationChannel(
             NotificationChannel(
                 CHANNEL_ALERTS,
@@ -44,15 +52,18 @@ class ReminderNotifier @Inject constructor(
             ).apply {
                 description = context.getString(R.string.notification_channel_alerts_description)
                 enableVibration(true)
-                // Alarm sound on the alarm stream: reminders must ring like
-                // alarms (and respect the alarm volume), not like chat pings.
-                setSound(
-                    Settings.System.DEFAULT_ALARM_ALERT_URI,
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_ALARM)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                        .build(),
-                )
+                setSound(null, null)
+            },
+        )
+        manager.createNotificationChannel(
+            NotificationChannel(
+                CHANNEL_CRITICAL,
+                context.getString(R.string.notification_channel_critical),
+                NotificationManager.IMPORTANCE_HIGH,
+            ).apply {
+                description = context.getString(R.string.notification_channel_critical_description)
+                enableVibration(true)
+                setSound(null, null)
             },
         )
         manager.createNotificationChannel(
@@ -68,16 +79,23 @@ class ReminderNotifier @Inject constructor(
         )
     }
 
-    fun showAlert(alert: ActiveAlert) {
+    /** Returns true when the notification was actually handed to the system. */
+    fun showAlert(alert: ActiveAlert): Boolean {
         if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) {
             logger.w(TAG, "Notifications disabled — cannot surface alert ${alert.entryId}")
-            return
+            diagnostics.log(
+                ReliabilityDiagnostics.STAGE_PERMISSION,
+                "Notifications DISABLED — entry ${alert.entryId} has no surface",
+            )
+            return false
         }
         val reminder = alert.reminder
-        val channel = if (reminder.soundEnabled || reminder.vibrationEnabled) {
-            CHANNEL_ALERTS
-        } else {
-            CHANNEL_SILENT
+        val channel = when {
+            !reminder.soundEnabled && !reminder.vibrationEnabled -> CHANNEL_SILENT
+            reminder.priority == com.alertnotes.domain.model.ReminderPriority.CRITICAL ->
+                CHANNEL_CRITICAL
+
+            else -> CHANNEL_ALERTS
         }
         val contentIntent = PendingIntent.getActivity(
             context,
@@ -97,7 +115,15 @@ class ReminderNotifier @Inject constructor(
             .setContentTitle(reminder.title)
             .setContentText(reminder.description.ifBlank { null })
             .setCategory(NotificationCompat.CATEGORY_ALARM)
-            .setPriority(NotificationCompat.PRIORITY_MAX)
+            // Low-priority reminders arrive quietly; everything else demands
+            // maximum prominence.
+            .setPriority(
+                if (reminder.priority == com.alertnotes.domain.model.ReminderPriority.LOW) {
+                    NotificationCompat.PRIORITY_DEFAULT
+                } else {
+                    NotificationCompat.PRIORITY_MAX
+                },
+            )
             .setVisibility(
                 if (reminder.showOnLockScreen) {
                     NotificationCompat.VISIBILITY_PUBLIC
@@ -115,14 +141,38 @@ class ReminderNotifier @Inject constructor(
             // NONE acknowledgement: allow direct dismissal from the shade.
             builder.setDeleteIntent(dismissIntent)
         }
-        if ((reminder.wakeScreen || reminder.showOnLockScreen) && canUseFullScreenIntent()) {
-            builder.setFullScreenIntent(contentIntent, true)
+        if (reminder.wakeScreen || reminder.showOnLockScreen) {
+            if (canUseFullScreenIntent()) {
+                builder.setFullScreenIntent(contentIntent, true)
+                diagnostics.log(
+                    ReliabilityDiagnostics.STAGE_FULL_SCREEN,
+                    "Entry ${alert.entryId}: full-screen intent attached",
+                )
+            } else {
+                diagnostics.log(
+                    ReliabilityDiagnostics.STAGE_PERMISSION,
+                    "Full-screen intents NOT permitted — entry ${alert.entryId} " +
+                        "degrades to heads-up (enable in Reminder Reliability)",
+                )
+            }
         }
 
-        runCatching {
+        return runCatching {
             NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, builder.build())
             lastAlertedEntryId = alert.entryId
-        }.onFailure { logger.e(TAG, "Failed to post alert notification", it) }
+            diagnostics.log(
+                ReliabilityDiagnostics.STAGE_NOTIFIED,
+                "Entry ${alert.entryId}: notification posted",
+            )
+            true
+        }.getOrElse {
+            logger.e(TAG, "Failed to post alert notification", it)
+            diagnostics.log(
+                ReliabilityDiagnostics.STAGE_NOTIFIED,
+                "Entry ${alert.entryId}: post FAILED (${it.message})",
+            )
+            false
+        }
     }
 
     fun cancel() {
@@ -144,7 +194,11 @@ class ReminderNotifier @Inject constructor(
 
     private companion object {
         const val TAG = "ReminderNotifier"
-        const val CHANNEL_ALERTS = "reminder_alerts"
+        const val CHANNEL_ALERTS_LEGACY = "reminder_alerts"
+        const val CHANNEL_ALERTS_V2 = "reminder_alerts_noti"
+        const val CHANNEL_CRITICAL_V2 = "reminder_alerts_critical"
+        const val CHANNEL_ALERTS = "reminder_alerts_v3"
+        const val CHANNEL_CRITICAL = "reminder_alerts_critical_v3"
         const val CHANNEL_SILENT = "reminder_alerts_silent"
         const val NOTIFICATION_ID = 1001
         const val REQUEST_OPEN = 10

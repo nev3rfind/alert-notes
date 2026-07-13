@@ -8,8 +8,13 @@ import com.alertnotes.core.permissions.PermissionStatus
 import com.alertnotes.core.permissions.AppPermission
 import com.alertnotes.core.permissions.PermissionsManager
 import com.alertnotes.core.util.TimeProvider
+import com.alertnotes.domain.model.AppMode
+import com.alertnotes.domain.model.AuthUser
 import com.alertnotes.domain.model.ThemeMode
 import com.alertnotes.domain.model.UserPreferences
+import com.alertnotes.domain.repository.AuthRepository
+import com.alertnotes.domain.repository.CloudBackupRepository
+import com.alertnotes.domain.repository.CloudUploadResult
 import com.alertnotes.domain.repository.SettingsRepository
 import com.alertnotes.domain.scheduling.ReminderSchedulingCoordinator
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -23,12 +28,24 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+/** Progress of the optional local-to-cloud reminder upload dialog. */
+sealed interface CloudUploadUiState {
+    data object Hidden : CloudUploadUiState
+
+    /** "Would you like to upload your local reminders?" — Upload / Skip. */
+    data object Prompt : CloudUploadUiState
+    data object Uploading : CloudUploadUiState
+    data class Finished(val result: CloudUploadResult) : CloudUploadUiState
+}
+
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val permissionsManager: PermissionsManager,
     private val coordinator: ReminderSchedulingCoordinator,
     private val timeProvider: TimeProvider,
+    private val authRepository: AuthRepository,
+    private val cloudBackupRepository: CloudBackupRepository,
 ) : ViewModel() {
 
     val preferences: StateFlow<UserPreferences> = settingsRepository.preferences
@@ -105,6 +122,54 @@ class SettingsViewModel @Inject constructor(
     /** Wipes every reminder; caller has already confirmed + authenticated. */
     fun clearAllReminders() {
         viewModelScope.launch { coordinator.clearAllReminders() }
+    }
+
+    // endregion
+
+    // region Application mode
+
+    /** The signed-in account, or null; drives the mode section labels. */
+    val authUser: StateFlow<AuthUser?> = authRepository.authState
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = authRepository.currentUser,
+        )
+
+    private val _uploadUiState = MutableStateFlow<CloudUploadUiState>(CloudUploadUiState.Hidden)
+    val uploadUiState: StateFlow<CloudUploadUiState> = _uploadUiState.asStateFlow()
+
+    /**
+     * Online → offline: end the session and stop cloud access. Deliberately
+     * touches nothing else — every reminder stays local, and whatever was
+     * uploaded stays in the account for when the user returns.
+     */
+    fun switchToOfflineMode() {
+        viewModelScope.launch {
+            authRepository.signOut()
+            settingsRepository.setAppMode(AppMode.OFFLINE)
+        }
+    }
+
+    /**
+     * Opens the upload prompt — after the settings-hosted auth flow
+     * finishes, and from the always-available "Upload reminders" row.
+     */
+    fun promptCloudUpload() {
+        _uploadUiState.value = CloudUploadUiState.Prompt
+    }
+
+    fun uploadLocalReminders() {
+        if (_uploadUiState.value == CloudUploadUiState.Uploading) return
+        _uploadUiState.value = CloudUploadUiState.Uploading
+        viewModelScope.launch {
+            val result = cloudBackupRepository.uploadAllReminders()
+            _uploadUiState.value = CloudUploadUiState.Finished(result)
+        }
+    }
+
+    fun dismissUploadDialog() {
+        _uploadUiState.value = CloudUploadUiState.Hidden
     }
 
     // endregion

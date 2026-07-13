@@ -27,6 +27,7 @@ import com.alertnotes.core.ui.theme.AlertNotesTheme
 import com.alertnotes.core.util.SecondTicker
 import com.alertnotes.domain.model.DisplayMode
 import com.alertnotes.domain.model.ThemeMode
+import com.alertnotes.features.account.FirstRunModeGate
 import com.alertnotes.features.alerts.AlertPresenter
 import com.alertnotes.features.alerts.ReminderAlertHost
 import com.alertnotes.features.launch.LaunchOverlay
@@ -53,11 +54,16 @@ class MainActivity : FragmentActivity() {
     /** Bumps once per widget quick-create request; consumed by the shell. */
     private var createReminderRequestId by mutableIntStateOf(0)
 
+    /** Latest push-notification destination; bumps once per tap. */
+    private var deepLink by androidx.compose.runtime.mutableStateOf<String?>(null)
+    private var deepLinkRequestId by mutableIntStateOf(0)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (intent.getBooleanExtra(EXTRA_CREATE_REMINDER, false)) {
             createReminderRequestId++
         }
+        consumeDeepLink(intent)
         enableEdgeToEdge()
         setContent {
             val themeState by viewModel.themeState.collectAsStateWithLifecycle()
@@ -87,6 +93,8 @@ class MainActivity : FragmentActivity() {
                 ) {
                     val appLockEnabled by viewModel.appLockEnabled.collectAsStateWithLifecycle()
                     val needsOnboarding by viewModel.needsOnboarding.collectAsStateWithLifecycle()
+                    val needsModeSelection by viewModel.needsModeSelection
+                        .collectAsStateWithLifecycle()
                     val activeAlert by presenter.activeAlert.collectAsStateWithLifecycle()
 
                     // With the app lock on, reminder content must not appear
@@ -107,7 +115,8 @@ class MainActivity : FragmentActivity() {
                     // alert is on top.
                     val fullScreenAlertActive =
                         activeAlert?.reminder?.displayMode == DisplayMode.FULL_SCREEN
-                    val blockAppSemantics = needsOnboarding == true ||
+                    val blockAppSemantics = needsModeSelection == true ||
+                        needsOnboarding == true ||
                         AppLockState.isLocked(appLockEnabled) ||
                         fullScreenAlertActive
                     Box {
@@ -118,10 +127,19 @@ class MainActivity : FragmentActivity() {
                                 Modifier
                             },
                         ) {
-                            AlertNotesApp(createReminderRequestId = createReminderRequestId)
+                            AlertNotesApp(
+                                createReminderRequestId = createReminderRequestId,
+                                deepLink = deepLink,
+                                deepLinkRequestId = deepLinkRequestId,
+                            )
                         }
-                        // First run: welcome + guided permissions over the app.
-                        if (needsOnboarding == true) {
+                        // First run, step 1: offline or online. Deliberately
+                        // instead of (not on top of) onboarding so the flow
+                        // underneath never leaks to TalkBack traversal.
+                        if (needsModeSelection == true) {
+                            FirstRunModeGate()
+                        } else if (needsOnboarding == true) {
+                            // First run, step 2: welcome + guided permissions.
                             OnboardingScreen()
                         }
                         // The lock covers app content, never the alert host —
@@ -146,6 +164,15 @@ class MainActivity : FragmentActivity() {
         setIntent(intent)
         if (intent.getBooleanExtra(EXTRA_CREATE_REMINDER, false)) {
             createReminderRequestId++
+        }
+        consumeDeepLink(intent)
+    }
+
+    /** Push-notification taps land here with their in-app destination. */
+    private fun consumeDeepLink(intent: Intent) {
+        intent.getStringExtra(com.alertnotes.services.SocialNotifier.EXTRA_DEEP_LINK)?.let {
+            deepLink = it
+            deepLinkRequestId++
         }
     }
 }

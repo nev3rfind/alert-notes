@@ -62,4 +62,22 @@ class MainViewModel @Inject constructor(
             started = SharingStarted.Eagerly,
             initialValue = null,
         )
+
+    /**
+     * True until the user has chosen offline or online mode — gates the
+     * whole app, ahead of onboarding. Null until preferences load, same as
+     * [needsOnboarding], so returning users never see the chooser flash.
+     * Users upgrading from the offline-only release (onboarding done, mode
+     * never set) are not gated: they implicitly stay offline and can opt
+     * into online mode from Settings.
+     */
+    // Unset mode always gates: first launch (before onboarding) and after
+    // Log Out (which clears the mode) both land on the welcome chooser.
+    val needsModeSelection: StateFlow<Boolean?> = settingsRepository.preferences
+        .map { it.appMode == null }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.Eagerly,
+            initialValue = null,
+        )
 }

@@ -26,6 +26,7 @@ import java.time.temporal.ChronoUnit
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /** Field-level validation results; null means the field is valid. */
@@ -104,6 +105,8 @@ class ReminderEditorViewModel @AssistedInject constructor(
     @Assisted("initialEpochDay") private val initialEpochDay: Long,
     private val reminderRepository: ReminderRepository,
     private val coordinator: ReminderSchedulingCoordinator,
+    private val settingsRepository: com.alertnotes.domain.repository.SettingsRepository,
+    private val templateRepository: com.alertnotes.domain.repository.TemplateRepository,
     private val timeProvider: TimeProvider,
     private val logger: AppLogger,
 ) : ViewModel() {
@@ -122,6 +125,14 @@ class ReminderEditorViewModel @AssistedInject constructor(
     /** Set once the edit session is complete; hosts close the editor. */
     private val _isFinished = MutableStateFlow(false)
     val isFinished: StateFlow<Boolean> = _isFinished.asStateFlow()
+
+    /**
+     * Id of a NEWLY created reminder saved in online mode — hosts that can
+     * navigate offer the "who should receive this?" flow instead of just
+     * closing. Never set by edits, deletes, or duplicates.
+     */
+    private val _savedForSharing = MutableStateFlow<Long?>(null)
+    val savedForSharing: StateFlow<Long?> = _savedForSharing.asStateFlow()
 
     /** What the draft is compared against to decide dirtiness. */
     private var baseline: Reminder? = null
@@ -259,7 +270,16 @@ class ReminderEditorViewModel @AssistedInject constructor(
         )
         viewModelScope.launch {
             try {
-                coordinator.saveAndSchedule(reminder)
+                val savedId = coordinator.saveAndSchedule(reminder)
+                // Brand-new reminders in online mode flow into the sharing
+                // chooser; edits close as before.
+                val online = runCatching {
+                    settingsRepository.preferences.first().appMode ==
+                        com.alertnotes.domain.model.AppMode.ONLINE
+                }.getOrDefault(false)
+                if (state.isNew && online) {
+                    _savedForSharing.value = savedId
+                }
                 _isFinished.value = true
             } catch (throwable: Throwable) {
                 logger.e(TAG, "Failed to save reminder ${reminder.id}", throwable)
@@ -277,6 +297,27 @@ class ReminderEditorViewModel @AssistedInject constructor(
             } catch (throwable: Throwable) {
                 logger.e(TAG, "Failed to delete reminder ${state.draft.id}", throwable)
             }
+        }
+    }
+
+    /** Captures the draft's behaviour (never its schedule) as a template. */
+    fun saveAsTemplate() {
+        val state = _uiState.value as? EditorUiState.Editing ?: return
+        viewModelScope.launch {
+            runCatching {
+                templateRepository.saveCustom(
+                    com.alertnotes.domain.model.ReminderTemplate(
+                        id = java.util.UUID.randomUUID().toString(),
+                        name = state.draft.title.trim().ifBlank { DEFAULT_TEMPLATE_NAME },
+                        title = state.draft.title.trim(),
+                        description = state.draft.description.trim(),
+                        priority = state.draft.priority,
+                        type = state.draft.type,
+                        acknowledgement = state.draft.acknowledgement,
+                        theme = state.draft.theme,
+                    ),
+                )
+            }.onFailure { logger.e(TAG, "Save as template failed", it) }
         }
     }
 
@@ -393,6 +434,7 @@ class ReminderEditorViewModel @AssistedInject constructor(
 
     private companion object {
         const val TAG = "ReminderEditor"
+        const val DEFAULT_TEMPLATE_NAME = "My template"
         const val MAX_MINUTES = 10_080L // one week
         const val MAX_HOURS = 720L // thirty days
         const val DEFAULT_DAY_OF_MONTH = 1

@@ -20,9 +20,21 @@ import com.alertnotes.features.backup.BackupScreen
 import com.alertnotes.features.calendar.CalendarScreen
 import com.alertnotes.features.history.HistoryScreen
 import com.alertnotes.features.home.HomeScreen
+import com.alertnotes.features.more.MoreScreen
+import com.alertnotes.features.profile.ProfileScreen
 import com.alertnotes.features.reminders.RemindersScreen
 import com.alertnotes.features.reminders.editor.ReminderEditorScreen
+import com.alertnotes.features.friends.FamilyScreen
+import com.alertnotes.features.friends.FriendsScreen
+import com.alertnotes.features.friends.PublicProfileScreen
+import com.alertnotes.features.settings.ReliabilityScreen
 import com.alertnotes.features.settings.SettingsScreen
+import com.alertnotes.features.chat.ChatScreen
+import com.alertnotes.features.chat.InboxScreen
+import com.alertnotes.features.chat.MessagesScreen
+import com.alertnotes.features.notifications.NotificationCentreScreen
+import com.alertnotes.features.sharing.ShareReminderScreen
+import com.alertnotes.features.sharing.SharedRemindersScreen
 
 private const val TRANSITION_MILLIS = 260
 
@@ -33,6 +45,7 @@ private const val TRANSITION_MILLIS = 260
 @Composable
 fun AlertNotesNavHost(
     navController: NavHostController,
+    onExit: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     NavHost(
@@ -53,10 +66,17 @@ fun AlertNotesNavHost(
         composable<HomeRoute> {
             HomeScreen(
                 onOpenReminders = { navController.navigateToTopLevel(RemindersRoute) },
-                onOpenCalendar = { navController.navigateToTopLevel(CalendarRoute) },
+                onOpenCalendar = { navController.navigate(CalendarRoute) },
                 onCreateReminder = { navController.navigate(ReminderEditorRoute(Reminder.NEW_ID)) },
-                onOpenSettings = { navController.navigateToTopLevel(SettingsRoute) },
+                onOpenSettings = { navController.navigate(SettingsRoute) },
                 onOpenBackup = { navController.navigate(BackupRoute) },
+                onOpenFriends = { navController.navigateToTopLevel(FriendsRoute) },
+                onOpenSharedReminders = { navController.navigate(SharedRemindersRoute) },
+                onOpenInbox = { navController.navigate(InboxRoute) },
+                onOpenMessages = { navController.navigateToTopLevel(MessagesRoute) },
+                onOpenNotifications = { navController.navigate(NotificationCentreRoute) },
+                onOpenSendReminder = { navController.navigate(ShareReminderRoute()) },
+                onOpenTemplates = { navController.navigate(TemplatesRoute) },
             )
         }
         composable<CalendarRoute> {
@@ -76,6 +96,7 @@ fun AlertNotesNavHost(
                 onOpenEditor = { reminderId ->
                     navController.navigate(ReminderEditorRoute(reminderId))
                 },
+                onOpenNotifications = { navController.navigate(NotificationCentreRoute) },
             )
         }
         composable<ReminderEditorRoute>(
@@ -94,6 +115,55 @@ fun AlertNotesNavHost(
                 reminderId = route.reminderId,
                 initialEpochDay = route.initialEpochDay,
                 onClose = navController::navigateUp,
+                // New reminders saved in online mode flow straight into the
+                // "who should receive this?" chooser, preselected.
+                onShareSaved = { savedId ->
+                    navController.popBackStack()
+                    navController.navigate(ShareReminderRoute(savedId))
+                },
+            )
+        }
+        composable<ProfileRoute> {
+            ProfileScreen(
+                onOpenSettings = { navController.navigate(SettingsRoute) },
+            )
+        }
+        composable<MoreRoute> {
+            MoreScreen(
+                onOpenProfile = { navController.navigate(ProfileRoute) },
+                onOpenCalendar = { navController.navigate(CalendarRoute) },
+                onOpenHistory = { navController.navigate(HistoryRoute) },
+                onOpenSettings = { navController.navigate(SettingsRoute) },
+                onOpenDiagnostics = { navController.navigate(ReliabilityRoute) },
+                onOpenInbox = { navController.navigate(InboxRoute) },
+                onOpenNotifications = { navController.navigate(NotificationCentreRoute) },
+                onOpenMessages = { navController.navigate(MessagesRoute) },
+                onOpenTemplates = { navController.navigate(TemplatesRoute) },
+                onOpenDevices = { navController.navigate(ConnectedDevicesRoute) },
+                onOpenShareReminder = { navController.navigate(ShareReminderRoute()) },
+                onOpenSharedReminders = { navController.navigate(SharedRemindersRoute) },
+                onExit = onExit,
+            )
+        }
+        composable<FriendsRoute> {
+            FriendsScreen(
+                onOpenUser = { uid -> navController.navigate(PublicProfileRoute(uid)) },
+                onOpenFamily = { navController.navigate(FamilyRoute) },
+                onOpenChat = { uid -> navController.navigate(ChatRoute(uid)) },
+                onOpenNotifications = { navController.navigate(NotificationCentreRoute) },
+            )
+        }
+        composable<FamilyRoute> {
+            FamilyScreen(
+                onOpenUser = { uid -> navController.navigate(PublicProfileRoute(uid)) },
+                onNavigateBack = navController::navigateUp,
+                onOpenChat = { uid -> navController.navigate(ChatRoute(uid)) },
+            )
+        }
+        composable<PublicProfileRoute> {
+            PublicProfileScreen(
+                onNavigateBack = navController::navigateUp,
+                onOpenChat = { uid -> navController.navigate(ChatRoute(uid)) },
             )
         }
         composable<SettingsRoute> {
@@ -101,6 +171,71 @@ fun AlertNotesNavHost(
                 onOpenBackup = { navController.navigate(BackupRoute) },
                 onOpenAbout = { navController.navigate(AboutRoute) },
                 onOpenHistory = { navController.navigate(HistoryRoute) },
+                onOpenReliability = { navController.navigate(ReliabilityRoute) },
+            )
+        }
+        composable<ReliabilityRoute> {
+            ReliabilityScreen(onNavigateBack = navController::navigateUp)
+        }
+        composable<ShareReminderRoute> { entry ->
+            val route = entry.toRoute<ShareReminderRoute>()
+            ShareReminderScreen(
+                onNavigateBack = navController::navigateUp,
+                initialReminderId = route.reminderId,
+                initialRecipientUid = route.recipientUid,
+            )
+        }
+        composable<SharedRemindersRoute> {
+            SharedRemindersScreen(
+                onNavigateBack = navController::navigateUp,
+                onOpenEditor = { reminderId ->
+                    navController.navigate(ReminderEditorRoute(reminderId))
+                },
+            )
+        }
+        composable<InboxRoute> {
+            InboxScreen(
+                onOpenSharedReminders = { navController.navigate(SharedRemindersRoute) },
+                onOpenFriends = { navController.navigateToTopLevel(FriendsRoute) },
+                onOpenMessages = { navController.navigateToTopLevel(MessagesRoute) },
+            )
+        }
+        composable<TemplatesRoute> {
+            com.alertnotes.features.templates.TemplatesScreen(
+                onNavigateBack = navController::navigateUp,
+                onOpenEditor = { reminderId ->
+                    navController.navigate(ReminderEditorRoute(reminderId))
+                },
+            )
+        }
+        composable<ConnectedDevicesRoute> {
+            com.alertnotes.features.account.ConnectedDevicesScreen(
+                onNavigateBack = navController::navigateUp,
+            )
+        }
+        composable<NotificationCentreRoute> {
+            NotificationCentreScreen(
+                onNavigateBack = navController::navigateUp,
+                onOpenChat = { uid -> navController.navigate(ChatRoute(uid)) },
+                onOpenShared = { navController.navigate(SharedRemindersRoute) },
+                onOpenInbox = { navController.navigate(InboxRoute) },
+            )
+        }
+        composable<MessagesRoute> {
+            MessagesScreen(
+                onOpenChat = { uid -> navController.navigate(ChatRoute(uid)) },
+                onOpenUser = { uid -> navController.navigate(PublicProfileRoute(uid)) },
+                onOpenFriends = { navController.navigateToTopLevel(FriendsRoute) },
+                onOpenNotifications = { navController.navigate(NotificationCentreRoute) },
+            )
+        }
+        composable<ChatRoute> {
+            ChatScreen(
+                onNavigateBack = navController::navigateUp,
+                onOpenTracking = { navController.navigate(SharedRemindersRoute) },
+                onSendReminder = { uid ->
+                    navController.navigate(ShareReminderRoute(recipientUid = uid))
+                },
             )
         }
         composable<HistoryRoute> {

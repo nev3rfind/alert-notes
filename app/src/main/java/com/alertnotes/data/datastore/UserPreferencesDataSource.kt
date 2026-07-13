@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.alertnotes.domain.model.AppMode
 import com.alertnotes.domain.model.ThemeMode
 import com.alertnotes.domain.model.UserPreferences
 import java.time.Instant
@@ -57,6 +58,15 @@ class UserPreferencesDataSource @Inject constructor(
         dataStore.edit { it[Keys.ONBOARDING_COMPLETED] = completed }
     }
 
+    suspend fun setAppMode(mode: AppMode) {
+        dataStore.edit { it[Keys.APP_MODE] = mode.name }
+    }
+
+    /** Log-out flow: unset mode so the welcome chooser gates the app again. */
+    suspend fun clearAppMode() {
+        dataStore.edit { it.remove(Keys.APP_MODE) }
+    }
+
     suspend fun setPausedUntil(until: Instant?) {
         dataStore.edit { preferences ->
             if (until == null) {
@@ -80,12 +90,17 @@ class UserPreferencesDataSource @Inject constructor(
                 ?: defaults.biometricLockEnabled,
             onboardingCompleted = this[Keys.ONBOARDING_COMPLETED]
                 ?: defaults.onboardingCompleted,
+            appMode = this[Keys.APP_MODE]?.toAppMode(),
             pausedUntil = this[Keys.PAUSED_UNTIL]?.let(Instant::ofEpochMilli),
         )
     }
 
     private fun String.toThemeMode(): ThemeMode =
         ThemeMode.entries.firstOrNull { it.name == this } ?: ThemeMode.SYSTEM
+
+    /** Unknown values degrade to OFFLINE — never to a cloud connection. */
+    private fun String.toAppMode(): AppMode =
+        AppMode.entries.firstOrNull { it.name == this } ?: AppMode.OFFLINE
 
     private object Keys {
         val THEME_MODE = stringPreferencesKey("theme_mode")
@@ -94,6 +109,7 @@ class UserPreferencesDataSource @Inject constructor(
         val CRITICAL_INTERRUPTS_ENABLED = booleanPreferencesKey("critical_interrupts_enabled")
         val BIOMETRIC_LOCK_ENABLED = booleanPreferencesKey("biometric_lock_enabled")
         val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
+        val APP_MODE = stringPreferencesKey("app_mode")
         val PAUSED_UNTIL = longPreferencesKey("paused_until_epoch_millis")
     }
 }
