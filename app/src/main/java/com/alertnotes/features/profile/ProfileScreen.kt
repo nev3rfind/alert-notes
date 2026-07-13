@@ -75,6 +75,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.alertnotes.BuildConfig
 import com.alertnotes.R
 import com.alertnotes.core.extensions.toDisplayDateTime
@@ -729,7 +730,10 @@ private fun Avatar(
 ) {
     if (publicProfile.photoUrl != null) {
         AsyncImage(
-            model = publicProfile.photoUrl,
+            model = ImageRequest.Builder(LocalContext.current)
+                .data(publicProfile.photoUrl)
+                .crossfade(true)
+                .build(),
             contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = Modifier

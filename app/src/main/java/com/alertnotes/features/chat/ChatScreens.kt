@@ -57,12 +57,17 @@ import com.alertnotes.core.ui.components.AppTextField
 import com.alertnotes.core.ui.components.AppTopBar
 import com.alertnotes.core.ui.components.SearchField
 import com.alertnotes.core.ui.components.SectionCard
+import com.alertnotes.core.ui.components.SkeletonLine
+import com.alertnotes.core.ui.components.SkeletonList
 import com.alertnotes.core.ui.theme.spacing
 import com.alertnotes.data.entities.toReminderDrawingOrNull
 import com.alertnotes.domain.model.ChatConversation
 import com.alertnotes.domain.model.ChatMessage
+import com.alertnotes.domain.model.FamilyInvitationWithProfile
 import com.alertnotes.domain.model.FriendError
 import com.alertnotes.domain.model.FriendException
+import com.alertnotes.domain.model.FriendRequestWithProfile
+import com.alertnotes.domain.model.ReminderShareWithProfile
 import com.alertnotes.domain.model.MessageStatus
 import com.alertnotes.domain.model.MessageType
 import com.alertnotes.domain.model.PublicProfile
@@ -137,8 +142,10 @@ class ChatViewModel @Inject constructor(
         }
     }
 
-    val messages: StateFlow<List<ChatMessage>> = chatRepository.observeMessages(otherUid)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    /** `null` until the first snapshot arrives — the screen shows loading. */
+    val messages: StateFlow<List<ChatMessage>?> = chatRepository.observeMessages(otherUid)
+        .map<List<ChatMessage>, List<ChatMessage>?> { it }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     val otherProfile: StateFlow<PublicProfile?> = friendRepository.observePublicProfile(otherUid)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
@@ -207,7 +214,10 @@ fun ChatScreen(
     onSendReminder: (String) -> Unit,
     viewModel: ChatViewModel = hiltViewModel(),
 ) {
-    val messages by viewModel.messages.collectAsStateWithLifecycle()
+    val messagesState by viewModel.messages.collectAsStateWithLifecycle()
+    // Loading (null) renders skeleton bubbles instead of a false "no messages".
+    val messagesLoading = messagesState == null
+    val messages = messagesState.orEmpty()
     val profile by viewModel.otherProfile.collectAsStateWithLifecycle()
     val conversation by viewModel.conversation.collectAsStateWithLifecycle()
     val sharesById by viewModel.sharesById.collectAsStateWithLifecycle()
@@ -313,7 +323,11 @@ fun ChatScreen(
                 contentPadding = PaddingValues(MaterialTheme.spacing.large),
                 verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
             ) {
-                if (messages.isEmpty()) {
+                if (messagesLoading) {
+                    item {
+                        MessageBubbleSkeletons()
+                    }
+                } else if (messages.isEmpty()) {
                     item {
                         Text(
                             text = stringResource(R.string.chat_empty),
@@ -686,15 +700,7 @@ fun MessagesScreen(
                 if (loaded == null) {
                     // First snapshot still in flight — never a false "empty".
                     item {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = MaterialTheme.spacing.huge),
-                        ) {
-                            androidx.compose.material3.CircularProgressIndicator(
-                                modifier = Modifier.align(Alignment.Center),
-                            )
-                        }
+                        SkeletonList(rows = 4)
                     }
                 } else if (visible.isEmpty()) {
                     item {
@@ -781,20 +787,48 @@ private fun DaySeparator(day: LocalDate) {
     }
 }
 
+/** Bubble-shaped placeholders shown while the first message snapshot loads. */
+@Composable
+private fun MessageBubbleSkeletons() {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
+    ) {
+        listOf(
+            180.dp to Alignment.Start,
+            120.dp to Alignment.End,
+            220.dp to Alignment.Start,
+            150.dp to Alignment.End,
+        ).forEach { (width, alignment) ->
+            SkeletonLine(
+                width = width,
+                height = 36.dp,
+                modifier = Modifier.align(alignment),
+            )
+        }
+    }
+}
+
 @HiltViewModel
 class InboxViewModel @Inject constructor(
     friendRepository: FriendRepository,
     sharingRepository: com.alertnotes.domain.repository.ReminderSharingRepository,
 ) : ViewModel() {
 
+    /** `null` until the first snapshot arrives — the screen shows loading. */
     val friendRequests = friendRepository.incomingRequests
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+        .map<List<FriendRequestWithProfile>, List<FriendRequestWithProfile>?> { it }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
+    /** `null` until the first snapshot arrives — the screen shows loading. */
     val familyInvitations = friendRepository.incomingFamilyInvitations
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+        .map<List<FamilyInvitationWithProfile>, List<FamilyInvitationWithProfile>?> { it }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
+    /** `null` until the first snapshot arrives — the screen shows loading. */
     val reminderInvitations = sharingRepository.incomingShares
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+        .map<List<ReminderShareWithProfile>, List<ReminderShareWithProfile>?> { it }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 }
 
 /**
@@ -809,11 +843,17 @@ fun InboxScreen(
     onOpenMessages: () -> Unit,
     viewModel: InboxViewModel = hiltViewModel(),
 ) {
-    val friendRequests by viewModel.friendRequests.collectAsStateWithLifecycle()
-    val familyInvitations by viewModel.familyInvitations.collectAsStateWithLifecycle()
-    val reminderInvitations by viewModel.reminderInvitations.collectAsStateWithLifecycle()
+    val friendRequestsState by viewModel.friendRequests.collectAsStateWithLifecycle()
+    val familyInvitationsState by viewModel.familyInvitations.collectAsStateWithLifecycle()
+    val reminderInvitationsState by viewModel.reminderInvitations.collectAsStateWithLifecycle()
 
-    val pendingShares = reminderInvitations
+    // Loading (any flow still null) renders neither "all clear" nor stale content.
+    val isLoading = friendRequestsState == null ||
+        familyInvitationsState == null ||
+        reminderInvitationsState == null
+    val friendRequests = friendRequestsState.orEmpty()
+    val familyInvitations = familyInvitationsState.orEmpty()
+    val pendingShares = reminderInvitationsState.orEmpty()
         .filter { it.share.status == com.alertnotes.domain.model.ShareStatus.PENDING }
 
     Scaffold(
@@ -832,7 +872,11 @@ fun InboxScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.extraLarge),
             ) {
-                if (friendRequests.isEmpty() && familyInvitations.isEmpty() &&
+                if (isLoading) {
+                    item {
+                        SkeletonList(rows = 3)
+                    }
+                } else if (friendRequests.isEmpty() && familyInvitations.isEmpty() &&
                     pendingShares.isEmpty()
                 ) {
                     item {

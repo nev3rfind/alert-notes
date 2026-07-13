@@ -38,7 +38,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
@@ -47,6 +49,7 @@ import com.alertnotes.core.extensions.toDisplayDateTime
 import com.alertnotes.core.ui.components.AppListItem
 import com.alertnotes.core.ui.components.AppTopBar
 import com.alertnotes.core.ui.components.SearchField
+import com.alertnotes.core.ui.components.SkeletonList
 import com.alertnotes.core.ui.theme.spacing
 import com.alertnotes.core.ui.components.SectionCard
 import com.alertnotes.domain.model.FamilyInvitationWithProfile
@@ -70,6 +73,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -107,8 +111,10 @@ class FriendsViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    val friends: StateFlow<List<FriendUser>> = friendRepository.friends
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    /** `null` until the first snapshot arrives — the screen shows loading. */
+    val friends: StateFlow<List<FriendUser>?> = friendRepository.friends
+        .map<List<FriendUser>, List<FriendUser>?> { it }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     val incoming: StateFlow<List<FriendRequestWithProfile>> = friendRepository.incomingRequests
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -116,8 +122,10 @@ class FriendsViewModel @Inject constructor(
     val outgoing: StateFlow<List<FriendRequestWithProfile>> = friendRepository.outgoingRequests
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    val family: StateFlow<List<FamilyMember>> = friendRepository.family
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    /** `null` until the first snapshot arrives — the screen shows loading. */
+    val family: StateFlow<List<FamilyMember>?> = friendRepository.family
+        .map<List<FamilyMember>, List<FamilyMember>?> { it }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     val incomingFamily: StateFlow<List<FamilyInvitationWithProfile>> =
         friendRepository.incomingFamilyInvitations
@@ -225,8 +233,8 @@ fun FriendsScreen(
     // Relationship badge for a search result, computed from the live lists.
     val badgeFor: @Composable (String) -> String? = { uid ->
         when {
-            family.any { it.uid == uid } -> stringResource(R.string.family_state_member)
-            friends.any { it.uid == uid } -> stringResource(R.string.friends_state_friends)
+            family.orEmpty().any { it.uid == uid } -> stringResource(R.string.family_state_member)
+            friends.orEmpty().any { it.uid == uid } -> stringResource(R.string.friends_state_friends)
             outgoing.any { it.request.toUid == uid } ->
                 stringResource(R.string.friends_state_request_sent)
             incoming.any { it.request.fromUid == uid } ->
@@ -358,11 +366,15 @@ fun FriendsScreen(
                 }
                 item {
                     SectionCard(title = stringResource(R.string.friends_section_friends)) {
-                        if (friends.isEmpty()) {
+                        // Loading (null) renders neither the empty state nor stale content.
+                        val friendList = friends
+                        if (friendList == null) {
+                            SkeletonList(rows = 4)
+                        } else if (friendList.isEmpty()) {
                             EmptyHint(text = stringResource(R.string.friends_list_empty))
                         } else {
-                            friends.forEach { friend ->
-                                val isFamily = family.any { it.uid == friend.uid }
+                            friendList.forEach { friend ->
+                                val isFamily = family.orEmpty().any { it.uid == friend.uid }
                                 PersonRow(
                                     profile = friend.profile,
                                     showLastSeen = true,
@@ -673,7 +685,10 @@ internal fun FriendAvatar(profile: PublicProfile, size: androidx.compose.ui.unit
     ) {
         if (profile.photoUrl != null) {
             AsyncImage(
-                model = profile.photoUrl,
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(profile.photoUrl)
+                    .crossfade(true)
+                    .build(),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier

@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.PhoneAndroid
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -33,6 +32,7 @@ import com.alertnotes.R
 import com.alertnotes.core.extensions.toDisplayDateTime
 import com.alertnotes.core.ui.components.AppTopBar
 import com.alertnotes.core.ui.components.SectionCard
+import com.alertnotes.core.ui.components.SkeletonList
 import com.alertnotes.core.ui.theme.spacing
 import com.alertnotes.data.remote.DeviceRemoteDataSource
 import com.alertnotes.domain.repository.AuthRepository
@@ -85,7 +85,14 @@ fun ConnectedDevicesScreen(
         Box(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
             val deviceList = devices
             if (deviceList == null) {
-                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                // First snapshot still in flight — never a false "empty".
+                SkeletonList(
+                    rows = 3,
+                    modifier = Modifier
+                        .widthIn(max = 640.dp)
+                        .align(Alignment.TopCenter)
+                        .padding(vertical = MaterialTheme.spacing.small),
+                )
             } else LazyColumn(
                 modifier = Modifier
                     .widthIn(max = 640.dp)

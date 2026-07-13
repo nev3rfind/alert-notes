@@ -55,8 +55,10 @@ import com.alertnotes.R
 import com.alertnotes.core.extensions.toDisplayDateTime
 import com.alertnotes.core.ui.components.AppTopBar
 import com.alertnotes.core.ui.components.PrimaryButton
+import com.alertnotes.core.ui.components.PrimaryCard
 import com.alertnotes.core.ui.components.SearchField
 import com.alertnotes.core.ui.components.SectionCard
+import com.alertnotes.core.ui.components.SkeletonLine
 import com.alertnotes.core.ui.theme.spacing
 import com.alertnotes.domain.model.FriendError
 import com.alertnotes.domain.model.FriendException
@@ -79,6 +81,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -444,11 +447,15 @@ class SharedRemindersViewModel @Inject constructor(
     private val sharingRepository: ReminderSharingRepository,
 ) : ViewModel() {
 
-    val incoming: StateFlow<List<ReminderShareWithProfile>> = sharingRepository.incomingShares
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    /** `null` until the first snapshot arrives — the screen shows loading. */
+    val incoming: StateFlow<List<ReminderShareWithProfile>?> = sharingRepository.incomingShares
+        .map<List<ReminderShareWithProfile>, List<ReminderShareWithProfile>?> { it }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    val outgoing: StateFlow<List<ReminderShareWithProfile>> = sharingRepository.outgoingShares
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    /** `null` until the first snapshot arrives — the screen shows loading. */
+    val outgoing: StateFlow<List<ReminderShareWithProfile>?> = sharingRepository.outgoingShares
+        .map<List<ReminderShareWithProfile>, List<ReminderShareWithProfile>?> { it }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     private val _notice = MutableStateFlow<FriendError?>(null)
     val notice: StateFlow<FriendError?> = _notice.asStateFlow()
@@ -505,11 +512,13 @@ fun SharedRemindersScreen(
     var filter by rememberSaveable { mutableStateOf<ShareStatus?>(null) }
     var pendingDeleteId by rememberSaveable { mutableStateOf<Long?>(null) }
 
-    val pendingIncoming = incoming.filter { it.share.status == ShareStatus.PENDING }
-    val pendingUpdates = incoming.filter {
+    // Loading (null) renders neither the empty state nor stale content.
+    val isLoading = incoming == null || outgoing == null
+    val pendingIncoming = incoming.orEmpty().filter { it.share.status == ShareStatus.PENDING }
+    val pendingUpdates = incoming.orEmpty().filter {
         it.share.updateRequested && it.share.hasPendingUpdate
     }
-    val filteredOutgoing = outgoing.filter { filter == null || it.share.status == filter }
+    val filteredOutgoing = outgoing.orEmpty().filter { filter == null || it.share.status == filter }
 
     Scaffold(
         topBar = {
@@ -532,6 +541,11 @@ fun SharedRemindersScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.extraLarge),
             ) {
+                if (isLoading) {
+                    items(SHARE_SKELETON_COUNT) {
+                        ShareCardSkeleton()
+                    }
+                }
                 if (pendingIncoming.isNotEmpty()) {
                     item {
                         SectionCard(title = stringResource(R.string.sharing_incoming_title)) {
@@ -586,7 +600,7 @@ fun SharedRemindersScreen(
                         }
                     }
                 }
-                item {
+                if (!isLoading) item {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -613,7 +627,7 @@ fun SharedRemindersScreen(
                         }
                     }
                 }
-                item {
+                if (!isLoading) item {
                     SectionCard(title = stringResource(R.string.sharing_outgoing_title)) {
                         if (filteredOutgoing.isEmpty()) {
                             Text(
@@ -666,6 +680,28 @@ fun SharedRemindersScreen(
         )
     }
 }
+
+/** Card-shaped placeholder for a share row while the first snapshot loads. */
+@Composable
+private fun ShareCardSkeleton() {
+    PrimaryCard(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(MaterialTheme.spacing.large)) {
+            SkeletonLine(width = 180.dp, height = 14.dp)
+            SkeletonLine(
+                width = 72.dp,
+                height = 20.dp,
+                modifier = Modifier.padding(top = MaterialTheme.spacing.small),
+            )
+            SkeletonLine(
+                width = 120.dp,
+                height = 10.dp,
+                modifier = Modifier.padding(top = MaterialTheme.spacing.small),
+            )
+        }
+    }
+}
+
+private const val SHARE_SKELETON_COUNT = 3
 
 /** Incoming invitation with preview; flags recipients-only assignments. */
 @Composable

@@ -27,6 +27,7 @@ import com.alertnotes.R
 import com.alertnotes.core.ui.components.AppListItem
 import com.alertnotes.core.ui.components.AppTopBar
 import com.alertnotes.core.ui.components.SectionCard
+import com.alertnotes.core.ui.components.SkeletonList
 import com.alertnotes.core.ui.theme.spacing
 
 /**
@@ -116,10 +117,14 @@ fun FamilyScreen(
                 }
                 item {
                     SectionCard(title = stringResource(R.string.family_section_my)) {
-                        if (family.isEmpty()) {
+                        // Loading (null) renders neither the empty state nor stale content.
+                        val familyList = family
+                        if (familyList == null) {
+                            SkeletonList(rows = 4)
+                        } else if (familyList.isEmpty()) {
                             EmptyHint(text = stringResource(R.string.family_list_empty))
                         } else {
-                            family.forEach { member ->
+                            familyList.forEach { member ->
                                 FamilyMemberRow(
                                     member = member,
                                     onOpen = { onOpenUser(member.uid) },

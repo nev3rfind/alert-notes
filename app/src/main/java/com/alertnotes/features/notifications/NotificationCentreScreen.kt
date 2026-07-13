@@ -58,6 +58,8 @@ import com.alertnotes.R
 import com.alertnotes.core.extensions.toDisplayDateTime
 import com.alertnotes.core.ui.components.AppTopBar
 import com.alertnotes.core.ui.components.SearchField
+import com.alertnotes.core.ui.components.SkeletonCircle
+import com.alertnotes.core.ui.components.SkeletonLine
 import com.alertnotes.core.ui.theme.spacing
 import com.alertnotes.domain.model.AppNotification
 import com.alertnotes.domain.model.NotificationCategory
@@ -75,6 +77,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -112,7 +115,8 @@ class NotificationCentreViewModel @Inject constructor(
     private val _category = MutableStateFlow(CentreCategoryFilter.ALL)
     val category: StateFlow<CentreCategoryFilter> = _category.asStateFlow()
 
-    val groups: StateFlow<CentreGroups> = combine(
+    /** `null` until the first snapshot arrives — the screen shows loading. */
+    val groups: StateFlow<CentreGroups?> = combine(
         repository.notifications,
         _query,
         _filter,
@@ -143,7 +147,8 @@ class NotificationCentreViewModel @Inject constructor(
                 day == null || (day != today && day != today.minusDays(1))
             },
         )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CentreGroups())
+    }.map<CentreGroups, CentreGroups?> { it }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     val unreadCount: StateFlow<Int> = repository.unreadCount
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
@@ -348,7 +353,13 @@ fun NotificationCentreScreen(
                         }
                     }
                 }
-                if (groups.isEmpty) {
+                // Loading (null) renders neither the empty state nor stale content.
+                val loaded = groups
+                if (loaded == null) {
+                    items(LOADING_SKELETON_ROWS) {
+                        NotificationCardSkeleton()
+                    }
+                } else if (loaded.isEmpty) {
                     item {
                         Column(
                             modifier = Modifier
@@ -378,28 +389,28 @@ fun NotificationCentreScreen(
                 } else {
                     notificationGroup(
                         titleRes = R.string.notifications_group_pinned,
-                        entries = groups.pinned,
+                        entries = loaded.pinned,
                         zone = zone,
                         viewModel = viewModel,
                         onOpen = openEntry,
                     )
                     notificationGroup(
                         titleRes = R.string.notifications_group_today,
-                        entries = groups.today,
+                        entries = loaded.today,
                         zone = zone,
                         viewModel = viewModel,
                         onOpen = openEntry,
                     )
                     notificationGroup(
                         titleRes = R.string.notifications_group_yesterday,
-                        entries = groups.yesterday,
+                        entries = loaded.yesterday,
                         zone = zone,
                         viewModel = viewModel,
                         onOpen = openEntry,
                     )
                     notificationGroup(
                         titleRes = R.string.notifications_group_earlier,
-                        entries = groups.earlier,
+                        entries = loaded.earlier,
                         zone = zone,
                         viewModel = viewModel,
                         onOpen = openEntry,
@@ -611,6 +622,35 @@ private fun NotificationCard(
         }
     }
 }
+
+/** Card-shaped placeholder mirroring [NotificationCard] while loading. */
+@Composable
+private fun NotificationCardSkeleton() {
+    Surface(
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(MaterialTheme.spacing.large),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            SkeletonCircle(size = 24.dp)
+            Column(modifier = Modifier.padding(start = MaterialTheme.spacing.medium)) {
+                SkeletonLine(width = 160.dp, height = 14.dp)
+                SkeletonLine(
+                    width = 220.dp,
+                    height = 10.dp,
+                    modifier = Modifier.padding(top = MaterialTheme.spacing.extraSmall),
+                )
+            }
+        }
+    }
+}
+
+private const val LOADING_SKELETON_ROWS = 6
 
 private fun NotificationCategory.icon(): ImageVector = when (this) {
     NotificationCategory.FRIEND_REQUEST -> Icons.Outlined.PersonAdd
