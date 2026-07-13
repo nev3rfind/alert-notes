@@ -59,6 +59,27 @@ class DeviceRemoteDataSource @Inject constructor(
                     "pushToken" to null,
                 ),
             ).await()
+            // Security signal: a device this account has never seen before
+            // just signed in. Written directly (not via the notification
+            // repository) to keep the dependency graph acyclic.
+            runCatching {
+                firestore.collection(FirestoreSchema.USERS).document(uid)
+                    .collection(FirestoreSchema.NOTIFICATIONS)
+                    .document("device_$deviceId")
+                    .set(
+                        mapOf(
+                            "category" to "SECURITY",
+                            "title" to "New device signed in",
+                            "body" to "${deviceName()} (${Build.MANUFACTURER} ${Build.MODEL})",
+                            "senderUid" to uid,
+                            "refId" to deviceId,
+                            "read" to false,
+                            "archived" to false,
+                            "pinned" to false,
+                            "createdAt" to FieldValue.serverTimestamp(),
+                        ),
+                    ).await()
+            }
         }
     }
 

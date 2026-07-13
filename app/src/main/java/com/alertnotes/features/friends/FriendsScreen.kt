@@ -186,6 +186,7 @@ fun FriendsScreen(
     onOpenUser: (String) -> Unit,
     onOpenFamily: () -> Unit,
     onOpenChat: (String) -> Unit,
+    onOpenNotifications: () -> Unit,
     viewModel: FriendsViewModel = hiltViewModel(),
 ) {
     val query by viewModel.query.collectAsStateWithLifecycle()
@@ -218,7 +219,16 @@ fun FriendsScreen(
     }
 
     Scaffold(
-        topBar = { AppTopBar(title = stringResource(R.string.nav_friends)) },
+        topBar = {
+            AppTopBar(
+                title = stringResource(R.string.nav_friends),
+                actions = {
+                    com.alertnotes.core.ui.components.NotificationBellAction(
+                        onOpen = onOpenNotifications,
+                    )
+                },
+            )
+        },
         containerColor = MaterialTheme.colorScheme.background,
     ) { innerPadding ->
         Box(

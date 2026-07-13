@@ -94,6 +94,7 @@ fun AlertNotesNavHost(
                 onOpenEditor = { reminderId ->
                     navController.navigate(ReminderEditorRoute(reminderId))
                 },
+                onOpenNotifications = { navController.navigate(NotificationCentreRoute) },
             )
         }
         composable<ReminderEditorRoute>(
@@ -146,6 +147,7 @@ fun AlertNotesNavHost(
                 onOpenUser = { uid -> navController.navigate(PublicProfileRoute(uid)) },
                 onOpenFamily = { navController.navigate(FamilyRoute) },
                 onOpenChat = { uid -> navController.navigate(ChatRoute(uid)) },
+                onOpenNotifications = { navController.navigate(NotificationCentreRoute) },
             )
         }
         composable<FamilyRoute> {
@@ -213,6 +215,7 @@ fun AlertNotesNavHost(
                 onOpenChat = { uid -> navController.navigate(ChatRoute(uid)) },
                 onOpenUser = { uid -> navController.navigate(PublicProfileRoute(uid)) },
                 onOpenFriends = { navController.navigateToTopLevel(FriendsRoute) },
+                onOpenNotifications = { navController.navigate(NotificationCentreRoute) },
             )
         }
         composable<ChatRoute> {

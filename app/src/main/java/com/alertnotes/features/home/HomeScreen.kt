@@ -104,7 +104,16 @@ fun HomeScreen(
     val recentlyCompleted by viewModel.recentlyCompleted.collectAsStateWithLifecycle()
 
     Scaffold(
-        topBar = { AppTopBar(title = stringResource(R.string.app_name)) },
+        topBar = {
+            AppTopBar(
+                title = stringResource(R.string.app_name),
+                actions = {
+                    com.alertnotes.core.ui.components.NotificationBellAction(
+                        onOpen = onOpenNotifications,
+                    )
+                },
+            )
+        },
         containerColor = MaterialTheme.colorScheme.background,
     ) { innerPadding ->
         Box(

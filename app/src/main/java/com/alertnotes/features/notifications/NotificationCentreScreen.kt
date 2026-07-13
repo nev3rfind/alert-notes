@@ -14,15 +14,20 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.FamilyRestroom
+import androidx.compose.material.icons.outlined.MarkEmailRead
 import androidx.compose.material.icons.outlined.NotificationsNone
 import androidx.compose.material.icons.outlined.PersonAdd
+import androidx.compose.material.icons.outlined.PushPin
+import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Unarchive
 import androidx.compose.material3.FilterChip
@@ -30,8 +35,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -49,12 +58,15 @@ import com.alertnotes.R
 import com.alertnotes.core.extensions.toDisplayDateTime
 import com.alertnotes.core.ui.components.AppTopBar
 import com.alertnotes.core.ui.components.SearchField
-import com.alertnotes.core.ui.components.SectionCard
 import com.alertnotes.core.ui.theme.spacing
 import com.alertnotes.domain.model.AppNotification
 import com.alertnotes.domain.model.NotificationCategory
+import com.alertnotes.domain.repository.AuthRepository
+import com.alertnotes.domain.repository.FriendRepository
 import com.alertnotes.domain.repository.NotificationCentreRepository
+import com.alertnotes.domain.repository.ReminderSharingRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import java.time.LocalDate
 import java.time.ZoneId
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -62,18 +74,33 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /** Read-state view over the centre. */
 enum class CentreFilter { UNREAD, ALL, ARCHIVED }
 
-/** Coarse category buckets — ten raw categories would drown the chip row. */
-enum class CentreCategoryFilter { ALL, SOCIAL, REMINDERS, MESSAGES }
+/** Coarse category buckets — the full enum would drown the chip row. */
+enum class CentreCategoryFilter { ALL, INVITATIONS, REMINDERS, MESSAGES, SECURITY }
+
+/** The centre's list, pre-grouped the way the screen renders it. */
+data class CentreGroups(
+    val pinned: List<AppNotification> = emptyList(),
+    val today: List<AppNotification> = emptyList(),
+    val yesterday: List<AppNotification> = emptyList(),
+    val earlier: List<AppNotification> = emptyList(),
+) {
+    val isEmpty: Boolean
+        get() = pinned.isEmpty() && today.isEmpty() && yesterday.isEmpty() && earlier.isEmpty()
+}
 
 @HiltViewModel
 class NotificationCentreViewModel @Inject constructor(
     private val repository: NotificationCentreRepository,
+    private val friendRepository: FriendRepository,
+    private val sharingRepository: ReminderSharingRepository,
+    private val authRepository: AuthRepository,
 ) : ViewModel() {
 
     private val _query = MutableStateFlow("")
@@ -85,13 +112,13 @@ class NotificationCentreViewModel @Inject constructor(
     private val _category = MutableStateFlow(CentreCategoryFilter.ALL)
     val category: StateFlow<CentreCategoryFilter> = _category.asStateFlow()
 
-    val items: StateFlow<List<AppNotification>> = combine(
+    val groups: StateFlow<CentreGroups> = combine(
         repository.notifications,
         _query,
         _filter,
         _category,
     ) { entries, query, filter, category ->
-        entries
+        val visible = entries
             .filter {
                 when (filter) {
                     CentreFilter.UNREAD -> !it.read && !it.archived
@@ -101,7 +128,22 @@ class NotificationCentreViewModel @Inject constructor(
             }
             .filter { it.category.inBucket(category) }
             .filter { it.matchesQuery(query) }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+        val zone = ZoneId.systemDefault()
+        val today = LocalDate.now(zone)
+        val (pinned, rest) = visible.partition { it.pinned }
+        val byDay = rest.groupBy { entry ->
+            entry.createdAt?.atZone(zone)?.toLocalDate()
+        }
+        CentreGroups(
+            pinned = pinned,
+            today = byDay[today].orEmpty(),
+            yesterday = byDay[today.minusDays(1)].orEmpty(),
+            earlier = rest.filter { entry ->
+                val day = entry.createdAt?.atZone(zone)?.toLocalDate()
+                day == null || (day != today && day != today.minusDays(1))
+            },
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CentreGroups())
 
     val unreadCount: StateFlow<Int> = repository.unreadCount
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
@@ -124,7 +166,46 @@ class NotificationCentreViewModel @Inject constructor(
 
     fun setArchived(id: String, archived: Boolean) = act { repository.setArchived(id, archived) }
 
+    fun setPinned(id: String, pinned: Boolean) = act { repository.setPinned(id, pinned) }
+
     fun delete(id: String) = act { repository.delete(id) }
+
+    /** Quick-accept straight from the card — no screen change needed. */
+    fun accept(entry: AppNotification) = act {
+        val me = authRepository.currentUser?.uid ?: return@act
+        when (entry.category) {
+            NotificationCategory.FRIEND_REQUEST ->
+                friendRepository.acceptRequest("${entry.senderUid}_$me")
+
+            NotificationCategory.FAMILY_INVITATION ->
+                friendRepository.acceptFamilyInvitation("${entry.senderUid}_$me")
+
+            NotificationCategory.REMINDER_INVITATION ->
+                sharingRepository.incomingShares.first()
+                    .firstOrNull { it.share.id == entry.refId }
+                    ?.let { sharingRepository.acceptShare(it.share) }
+
+            else -> Unit
+        }
+        repository.markRead(entry.id)
+    }
+
+    fun decline(entry: AppNotification) = act {
+        val me = authRepository.currentUser?.uid ?: return@act
+        when (entry.category) {
+            NotificationCategory.FRIEND_REQUEST ->
+                friendRepository.rejectRequest("${entry.senderUid}_$me")
+
+            NotificationCategory.FAMILY_INVITATION ->
+                friendRepository.declineFamilyInvitation("${entry.senderUid}_$me")
+
+            NotificationCategory.REMINDER_INVITATION ->
+                sharingRepository.declineShare(entry.refId)
+
+            else -> Unit
+        }
+        repository.markRead(entry.id)
+    }
 
     private fun act(operation: suspend () -> Unit) {
         viewModelScope.launch { runCatching { operation() } }
@@ -133,12 +214,17 @@ class NotificationCentreViewModel @Inject constructor(
 
 private fun NotificationCategory.inBucket(bucket: CentreCategoryFilter): Boolean = when (bucket) {
     CentreCategoryFilter.ALL -> true
-    CentreCategoryFilter.SOCIAL ->
-        this == NotificationCategory.FRIEND_REQUEST || this == NotificationCategory.FAMILY_INVITATION
-
+    CentreCategoryFilter.INVITATIONS -> this in INVITATION_CATEGORIES
     CentreCategoryFilter.REMINDERS -> this in REMINDER_CATEGORIES
     CentreCategoryFilter.MESSAGES -> this == NotificationCategory.CHAT_MESSAGE
+    CentreCategoryFilter.SECURITY -> this == NotificationCategory.SECURITY
 }
+
+private val INVITATION_CATEGORIES = setOf(
+    NotificationCategory.FRIEND_REQUEST,
+    NotificationCategory.FAMILY_INVITATION,
+    NotificationCategory.REMINDER_INVITATION,
+)
 
 private val REMINDER_CATEGORIES = setOf(
     NotificationCategory.REMINDER_INVITATION,
@@ -151,9 +237,11 @@ private val REMINDER_CATEGORIES = setOf(
 )
 
 /**
- * The Notification Centre: every important event, kept after the push
- * banner is long gone — searchable, filterable by read state and category,
- * archivable, deletable, and each entry deep-links to where it happened.
+ * The Notification Centre: everything requiring attention, grouped by day
+ * with pinned items on top, live search and filters, swipe to mark-read
+ * (right) or archive (left), pinning, deletion, and quick Accept/Decline
+ * directly on invitation cards. Every entry deep-links to where it
+ * happened; the durable record outlives any dismissed push.
  */
 @Composable
 fun NotificationCentreScreen(
@@ -163,12 +251,27 @@ fun NotificationCentreScreen(
     onOpenInbox: () -> Unit,
     viewModel: NotificationCentreViewModel = hiltViewModel(),
 ) {
-    val items by viewModel.items.collectAsStateWithLifecycle()
+    val groups by viewModel.groups.collectAsStateWithLifecycle()
     val query by viewModel.query.collectAsStateWithLifecycle()
     val filter by viewModel.filter.collectAsStateWithLifecycle()
     val category by viewModel.category.collectAsStateWithLifecycle()
     val unreadCount by viewModel.unreadCount.collectAsStateWithLifecycle()
     val zone = ZoneId.systemDefault()
+
+    val openEntry: (AppNotification) -> Unit = { entry ->
+        viewModel.markRead(entry.id)
+        when (entry.category) {
+            NotificationCategory.CHAT_MESSAGE ->
+                if (entry.refId.isNotBlank()) onOpenChat(entry.refId)
+
+            NotificationCategory.FRIEND_REQUEST,
+            NotificationCategory.FAMILY_INVITATION,
+            -> onOpenInbox()
+
+            NotificationCategory.SECURITY, NotificationCategory.SYSTEM -> Unit
+            else -> onOpenShared()
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -189,7 +292,7 @@ fun NotificationCentreScreen(
                     horizontal = MaterialTheme.spacing.large,
                     vertical = MaterialTheme.spacing.small,
                 ),
-                verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.medium),
+                verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
             ) {
                 item {
                     SearchField(
@@ -222,6 +325,11 @@ fun NotificationCentreScreen(
                                 },
                             )
                         }
+                        if (unreadCount > 0) {
+                            TextButton(onClick = viewModel::markAllRead) {
+                                Text(text = stringResource(R.string.notifications_mark_all_read))
+                            }
+                        }
                     }
                 }
                 item {
@@ -238,153 +346,268 @@ fun NotificationCentreScreen(
                                 label = { Text(text = stringResource(option.labelRes())) },
                             )
                         }
-                        if (unreadCount > 0) {
-                            TextButton(onClick = viewModel::markAllRead) {
-                                Text(text = stringResource(R.string.notifications_mark_all_read))
-                            }
-                        }
                     }
                 }
-                if (items.isEmpty()) {
+                if (groups.isEmpty) {
                     item {
-                        SectionCard(title = stringResource(R.string.notifications_section)) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(MaterialTheme.spacing.extraLarge),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.NotificationsNone,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                Text(
-                                    text = stringResource(
-                                        when (filter) {
-                                            CentreFilter.UNREAD -> R.string.notifications_empty_unread
-                                            CentreFilter.ALL -> R.string.notifications_empty_all
-                                            CentreFilter.ARCHIVED -> R.string.notifications_empty_archived
-                                        },
-                                    ),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(top = MaterialTheme.spacing.small),
-                                )
-                            }
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(MaterialTheme.spacing.extraLarge),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.NotificationsNone,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(
+                                text = stringResource(
+                                    when (filter) {
+                                        CentreFilter.UNREAD -> R.string.notifications_empty_unread
+                                        CentreFilter.ALL -> R.string.notifications_empty_all
+                                        CentreFilter.ARCHIVED -> R.string.notifications_empty_archived
+                                    },
+                                ),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = MaterialTheme.spacing.small),
+                            )
                         }
                     }
                 } else {
-                    item {
-                        SectionCard(title = stringResource(R.string.notifications_section)) {
-                            Column {
-                                items.forEach { entry ->
-                                    NotificationRow(
-                                        entry = entry,
-                                        time = entry.createdAt?.toDisplayDateTime(zone).orEmpty(),
-                                        onOpen = {
-                                            viewModel.markRead(entry.id)
-                                            when (entry.category) {
-                                                NotificationCategory.CHAT_MESSAGE ->
-                                                    if (entry.refId.isNotBlank()) onOpenChat(entry.refId)
-
-                                                NotificationCategory.FRIEND_REQUEST,
-                                                NotificationCategory.FAMILY_INVITATION,
-                                                -> onOpenInbox()
-
-                                                else -> onOpenShared()
-                                            }
-                                        },
-                                        onArchiveToggle = {
-                                            viewModel.setArchived(entry.id, !entry.archived)
-                                        },
-                                        onDelete = { viewModel.delete(entry.id) },
-                                    )
-                                }
-                            }
-                        }
-                    }
+                    notificationGroup(
+                        titleRes = R.string.notifications_group_pinned,
+                        entries = groups.pinned,
+                        zone = zone,
+                        viewModel = viewModel,
+                        onOpen = openEntry,
+                    )
+                    notificationGroup(
+                        titleRes = R.string.notifications_group_today,
+                        entries = groups.today,
+                        zone = zone,
+                        viewModel = viewModel,
+                        onOpen = openEntry,
+                    )
+                    notificationGroup(
+                        titleRes = R.string.notifications_group_yesterday,
+                        entries = groups.yesterday,
+                        zone = zone,
+                        viewModel = viewModel,
+                        onOpen = openEntry,
+                    )
+                    notificationGroup(
+                        titleRes = R.string.notifications_group_earlier,
+                        entries = groups.earlier,
+                        zone = zone,
+                        viewModel = viewModel,
+                        onOpen = openEntry,
+                    )
                 }
             }
         }
     }
 }
 
+/** One day-group: uppercase header + swipeable, animating cards. */
+private fun androidx.compose.foundation.lazy.LazyListScope.notificationGroup(
+    titleRes: Int,
+    entries: List<AppNotification>,
+    zone: ZoneId,
+    viewModel: NotificationCentreViewModel,
+    onOpen: (AppNotification) -> Unit,
+) {
+    if (entries.isEmpty()) return
+    item(key = "header_$titleRes") {
+        Text(
+            text = stringResource(titleRes).uppercase(),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(
+                start = MaterialTheme.spacing.small,
+                top = MaterialTheme.spacing.medium,
+            ),
+        )
+    }
+    items(entries, key = { it.id }) { entry ->
+        SwipeableNotificationCard(
+            entry = entry,
+            time = entry.createdAt?.toDisplayDateTime(zone).orEmpty(),
+            viewModel = viewModel,
+            onOpen = { onOpen(entry) },
+        )
+    }
+}
+
+/**
+ * Swipe right = mark read, swipe left = archive/unarchive. The card snaps
+ * back after the action — the live flow moves it to its new home, animated.
+ */
 @Composable
-private fun NotificationRow(
+private fun SwipeableNotificationCard(
+    entry: AppNotification,
+    time: String,
+    viewModel: NotificationCentreViewModel,
+    onOpen: () -> Unit,
+) {
+    val dismissState = rememberSwipeToDismissBoxState()
+    androidx.compose.runtime.LaunchedEffect(dismissState.currentValue) {
+        when (dismissState.currentValue) {
+            SwipeToDismissBoxValue.StartToEnd -> {
+                viewModel.markRead(entry.id)
+                dismissState.reset()
+            }
+
+            SwipeToDismissBoxValue.EndToStart -> {
+                viewModel.setArchived(entry.id, !entry.archived)
+                dismissState.reset()
+            }
+
+            SwipeToDismissBoxValue.Settled -> Unit
+        }
+    }
+    SwipeToDismissBox(
+        state = dismissState,
+        backgroundContent = {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = MaterialTheme.spacing.large),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.MarkEmailRead,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+                Box(modifier = Modifier.weight(1f))
+                Icon(
+                    imageVector = if (entry.archived) Icons.Outlined.Unarchive else Icons.Outlined.Archive,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+    ) {
+        NotificationCard(
+            entry = entry,
+            time = time,
+            onOpen = onOpen,
+            onPinToggle = { viewModel.setPinned(entry.id, !entry.pinned) },
+            onDelete = { viewModel.delete(entry.id) },
+            onAccept = { viewModel.accept(entry) },
+            onDecline = { viewModel.decline(entry) },
+        )
+    }
+}
+
+@Composable
+private fun NotificationCard(
     entry: AppNotification,
     time: String,
     onOpen: () -> Unit,
-    onArchiveToggle: () -> Unit,
+    onPinToggle: () -> Unit,
     onDelete: () -> Unit,
+    onAccept: () -> Unit,
+    onDecline: () -> Unit,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onOpen)
-            .padding(
-                horizontal = MaterialTheme.spacing.large,
-                vertical = MaterialTheme.spacing.small,
-            ),
-        verticalAlignment = Alignment.CenterVertically,
+    Surface(
+        shape = MaterialTheme.shapes.large,
+        color = if (!entry.read && !entry.archived) {
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerLow
+        },
+        modifier = Modifier.fillMaxWidth(),
     ) {
-        Icon(
-            imageVector = entry.category.icon(),
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
-        )
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .padding(horizontal = MaterialTheme.spacing.medium),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (!entry.read) {
-                    Box(
-                        modifier = Modifier
-                            .padding(end = MaterialTheme.spacing.extraSmall)
-                            .size(8.dp)
-                            .background(MaterialTheme.colorScheme.primary, CircleShape),
+        Column(modifier = Modifier.clickable(onClick = onOpen)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        start = MaterialTheme.spacing.large,
+                        top = MaterialTheme.spacing.small,
+                        bottom = MaterialTheme.spacing.extraSmall,
+                    ),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = entry.category.icon(),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = MaterialTheme.spacing.medium),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (!entry.read) {
+                            Box(
+                                modifier = Modifier
+                                    .padding(end = MaterialTheme.spacing.extraSmall)
+                                    .size(8.dp)
+                                    .background(MaterialTheme.colorScheme.primary, CircleShape),
+                            )
+                        }
+                        Text(
+                            text = entry.title,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = if (entry.read) FontWeight.Normal else FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    Text(
+                        text = entry.body,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (time.isNotBlank()) {
+                        Text(
+                            text = time,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                IconButton(onClick = onPinToggle) {
+                    Icon(
+                        imageVector = if (entry.pinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
+                        contentDescription = stringResource(
+                            if (entry.pinned) R.string.notifications_unpin else R.string.notifications_pin,
+                        ),
+                        tint = if (entry.pinned) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
                     )
                 }
-                Text(
-                    text = entry.title,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = if (entry.read) FontWeight.Normal else FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                IconButton(onClick = onDelete) {
+                    Icon(
+                        imageVector = Icons.Outlined.Delete,
+                        contentDescription = stringResource(R.string.notifications_delete),
+                        tint = MaterialTheme.colorScheme.error,
+                    )
+                }
             }
-            Text(
-                text = entry.body,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (time.isNotBlank()) {
-                Text(
-                    text = time,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            if (entry.category in INVITATION_CATEGORIES) {
+                Row(modifier = Modifier.padding(start = MaterialTheme.spacing.extraLarge)) {
+                    TextButton(onClick = onAccept) {
+                        Text(text = stringResource(R.string.friends_accept))
+                    }
+                    TextButton(onClick = onDecline) {
+                        Text(
+                            text = stringResource(R.string.friends_reject),
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
             }
-        }
-        IconButton(onClick = onArchiveToggle) {
-            Icon(
-                imageVector = if (entry.archived) Icons.Outlined.Unarchive else Icons.Outlined.Archive,
-                contentDescription = stringResource(
-                    if (entry.archived) R.string.notifications_unarchive else R.string.notifications_archive,
-                ),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        IconButton(onClick = onDelete) {
-            Icon(
-                imageVector = Icons.Outlined.Delete,
-                contentDescription = stringResource(R.string.notifications_delete),
-                tint = MaterialTheme.colorScheme.error,
-            )
         }
     }
 }
@@ -393,6 +616,7 @@ private fun NotificationCategory.icon(): ImageVector = when (this) {
     NotificationCategory.FRIEND_REQUEST -> Icons.Outlined.PersonAdd
     NotificationCategory.FAMILY_INVITATION -> Icons.Outlined.FamilyRestroom
     NotificationCategory.CHAT_MESSAGE -> Icons.Outlined.ChatBubbleOutline
+    NotificationCategory.SECURITY -> Icons.Outlined.Security
     NotificationCategory.SYSTEM -> Icons.Outlined.NotificationsNone
     else -> Icons.Outlined.Share
 }
@@ -405,7 +629,8 @@ private fun CentreFilter.labelRes(): Int = when (this) {
 
 private fun CentreCategoryFilter.labelRes(): Int = when (this) {
     CentreCategoryFilter.ALL -> R.string.notifications_category_all
-    CentreCategoryFilter.SOCIAL -> R.string.notifications_category_social
+    CentreCategoryFilter.INVITATIONS -> R.string.notifications_category_invitations
     CentreCategoryFilter.REMINDERS -> R.string.notifications_category_reminders
     CentreCategoryFilter.MESSAGES -> R.string.notifications_category_messages
+    CentreCategoryFilter.SECURITY -> R.string.notifications_category_security
 }

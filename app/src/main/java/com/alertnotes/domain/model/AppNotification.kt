@@ -18,6 +18,9 @@ enum class NotificationCategory {
     REMINDER_TRIGGERED,
     REMINDER_ACKNOWLEDGED,
     CHAT_MESSAGE,
+
+    /** New-device sign-ins and other account-safety events. */
+    SECURITY,
     SYSTEM,
 }
 
@@ -38,6 +41,8 @@ data class AppNotification(
     val refId: String,
     val read: Boolean,
     val archived: Boolean,
+    /** Pinned entries stay at the top of the centre until unpinned. */
+    val pinned: Boolean,
     val createdAt: Instant?,
 ) {
     /** Case-insensitive match against title and body for centre search. */

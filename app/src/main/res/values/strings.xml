@@ -77,6 +77,14 @@
     <string name="notifications_category_social">Requests</string>
     <string name="notifications_category_reminders">Reminders</string>
     <string name="notifications_category_messages">Messages</string>
+    <string name="notifications_category_invitations">Invitations</string>
+    <string name="notifications_category_security">Security</string>
+    <string name="notifications_group_pinned">Pinned</string>
+    <string name="notifications_group_today">Today</string>
+    <string name="notifications_group_yesterday">Yesterday</string>
+    <string name="notifications_group_earlier">Earlier</string>
+    <string name="notifications_pin">Pin notification</string>
+    <string name="notifications_unpin">Unpin notification</string>
     <string name="notifications_mark_all_read">Mark all read</string>
     <string name="notifications_archive">Archive</string>
     <string name="notifications_unarchive">Unarchive</string>

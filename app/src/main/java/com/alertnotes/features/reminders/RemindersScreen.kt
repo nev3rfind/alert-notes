@@ -83,6 +83,7 @@ private const val NO_EDITOR = -1L
 @Composable
 fun RemindersScreen(
     onOpenEditor: (Long) -> Unit,
+    onOpenNotifications: () -> Unit,
     viewModel: RemindersViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -124,6 +125,9 @@ fun RemindersScreen(
             AppTopBar(
                 title = stringResource(R.string.nav_reminders),
                 actions = {
+                    com.alertnotes.core.ui.components.NotificationBellAction(
+                        onOpen = onOpenNotifications,
+                    )
                     val content = uiState as? RemindersUiState.Content
                     if (content != null) {
                         SortMenuAction(

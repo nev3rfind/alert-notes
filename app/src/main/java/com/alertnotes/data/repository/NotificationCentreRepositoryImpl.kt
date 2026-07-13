@@ -112,6 +112,13 @@ class NotificationCentreRepositoryImpl @Inject constructor(
         }.onFailure { logger.d(TAG, "setArchived skipped: ${it.message}") }
     }
 
+    override suspend fun setPinned(id: String, pinned: Boolean) {
+        val me = auth.currentUser?.uid ?: return
+        runCatching {
+            centreOf(me).document(id).set(mapOf("pinned" to pinned), SetOptions.merge()).await()
+        }.onFailure { logger.d(TAG, "setPinned skipped: ${it.message}") }
+    }
+
     override suspend fun delete(id: String) {
         val me = auth.currentUser?.uid ?: return
         runCatching { centreOf(me).document(id).delete().await() }
@@ -144,6 +151,7 @@ class NotificationCentreRepositoryImpl @Inject constructor(
         refId = getString("refId").orEmpty(),
         read = getBoolean("read") == true,
         archived = getBoolean("archived") == true,
+        pinned = getBoolean("pinned") == true,
         createdAt = instantField("createdAt"),
     )
 

@@ -590,6 +590,7 @@ fun MessagesScreen(
     onOpenChat: (String) -> Unit,
     onOpenUser: (String) -> Unit,
     onOpenFriends: () -> Unit,
+    onOpenNotifications: () -> Unit,
     viewModel: MessagesViewModel = hiltViewModel(),
 ) {
     val query by viewModel.query.collectAsStateWithLifecycle()
@@ -601,7 +602,16 @@ fun MessagesScreen(
     }
 
     Scaffold(
-        topBar = { AppTopBar(title = stringResource(R.string.nav_messages)) },
+        topBar = {
+            AppTopBar(
+                title = stringResource(R.string.nav_messages),
+                actions = {
+                    com.alertnotes.core.ui.components.NotificationBellAction(
+                        onOpen = onOpenNotifications,
+                    )
+                },
+            )
+        },
         containerColor = MaterialTheme.colorScheme.background,
     ) { innerPadding ->
         Box(modifier = Modifier.padding(innerPadding).fillMaxSize()) {

@@ -44,5 +44,8 @@ interface NotificationCentreRepository {
 
     suspend fun setArchived(id: String, archived: Boolean)
 
+    /** Pinned entries surface at the top of the centre until unpinned. */
+    suspend fun setPinned(id: String, pinned: Boolean)
+
     suspend fun delete(id: String)
 }

@@ -110,7 +110,16 @@ fun MoreScreen(
         )
     }
     Scaffold(
-        topBar = { AppTopBar(title = stringResource(R.string.nav_more)) },
+        topBar = {
+            AppTopBar(
+                title = stringResource(R.string.nav_more),
+                actions = {
+                    com.alertnotes.core.ui.components.NotificationBellAction(
+                        onOpen = onOpenNotifications,
+                    )
+                },
+            )
+        },
         containerColor = MaterialTheme.colorScheme.background,
     ) { innerPadding ->
         Box(
