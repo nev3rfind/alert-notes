@@ -846,7 +846,7 @@ private fun OutgoingShareCard(
 
 /** The recipient's signature, re-rendered from its vector — proof inline. */
 @Composable
-private fun SignaturePreview(signature: com.alertnotes.domain.model.ReminderDrawing) {
+internal fun SignaturePreview(signature: com.alertnotes.domain.model.ReminderDrawing) {
     val description = stringResource(R.string.sharing_ack_signature_cd)
     androidx.compose.foundation.Canvas(
         modifier = Modifier
@@ -863,7 +863,7 @@ private fun SignaturePreview(signature: com.alertnotes.domain.model.ReminderDraw
 
 /** The live camera proof; tap to inspect it full screen. */
 @Composable
-private fun PhotoProofPreview(url: String) {
+internal fun PhotoProofPreview(url: String) {
     var showFullScreen by androidx.compose.runtime.remember {
         androidx.compose.runtime.mutableStateOf(false)
     }
@@ -997,7 +997,7 @@ private fun com.alertnotes.domain.model.ShareTimelineEventType.tint():
 
 /** Location proof: mini map, coordinates, address, and a jump to Maps. */
 @Composable
-private fun LocationProofDetails(
+internal fun LocationProofDetails(
     latitude: Double,
     longitude: Double,
     accuracyMeters: Double?,
@@ -1089,7 +1089,7 @@ private fun openInMaps(context: android.content.Context, latitude: Double, longi
 private const val MAP_PREVIEW_ASPECT = 2.4f
 
 /** Human response delay: "37s", "4m 18s", "1h 12m". */
-private fun formatResponseDelay(seconds: Long): String = when {
+internal fun formatResponseDelay(seconds: Long): String = when {
     seconds < 60 -> "${seconds}s"
     seconds < 3_600 -> "${seconds / 60}m ${seconds % 60}s"
     else -> "${seconds / 3_600}h ${(seconds % 3_600) / 60}m"

@@ -26,6 +26,7 @@ import java.time.Instant
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -34,6 +35,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
 
 /**
  * Firestore-backed 1:1 chat. One conversation document per pair
@@ -141,20 +143,28 @@ class ChatRepositoryImpl @Inject constructor(
 
     override suspend fun setActiveConversation(otherUid: String?) {
         val me = auth.currentUser?.uid ?: return
-        // Local half first — the messaging service reads it synchronously.
-        if (otherUid != null) {
-            chatSessionTracker.onConversationVisible(otherUid)
-        } else {
-            chatSessionTracker.activePartnerUid.value?.let(chatSessionTracker::onConversationHidden)
+        // Must survive caller cancellation: the clearing call fires from
+        // ON_STOP/leave-composition moments before the ViewModel scope is
+        // torn down, and a cancelled clear would suppress this partner's
+        // pushes indefinitely.
+        withContext(NonCancellable) {
+            // Local half first — the messaging service reads it synchronously.
+            if (otherUid != null) {
+                chatSessionTracker.onConversationVisible(otherUid)
+            } else {
+                chatSessionTracker.activePartnerUid.value
+                    ?.let(chatSessionTracker::onConversationHidden)
+            }
+            // Server half: the Cloud Function checks this before pushing.
+            runCatching {
+                val chatId = otherUid?.let { listOf(me, it).sorted().joinToString("_") }
+                firestore.collection(FirestoreSchema.USERS).document(me)
+                    .collection(FirestoreSchema.SECTION_PRIVATE)
+                    .document(FirestoreSchema.SECTION_DOC)
+                    .set(mapOf("activeChatId" to chatId), SetOptions.merge())
+                    .await()
+            }.onFailure { logger.d(TAG, "Active-conversation mirror failed: ${it.message}") }
         }
-        // Server half: the Cloud Function checks this before pushing.
-        runCatching {
-            val chatId = otherUid?.let { listOf(me, it).sorted().joinToString("_") }
-            firestore.collection(FirestoreSchema.USERS).document(me)
-                .collection(FirestoreSchema.SECTION_PRIVATE).document(FirestoreSchema.SECTION_DOC)
-                .set(mapOf("activeChatId" to chatId), SetOptions.merge())
-                .await()
-        }.onFailure { logger.d(TAG, "Active-conversation mirror failed: ${it.message}") }
     }
 
     override suspend fun deleteForMe(otherUid: String, messageId: String) = runChatOp {

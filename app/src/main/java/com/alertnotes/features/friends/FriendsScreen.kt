@@ -63,6 +63,8 @@ import java.time.ZoneId
 import javax.inject.Inject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -80,12 +82,28 @@ class FriendsViewModel @Inject constructor(
     private val _query = MutableStateFlow("")
     val query: StateFlow<String> = _query.asStateFlow()
 
+    /** True from the first keystroke until the debounced search lands —
+     * covers both the debounce window and the Firestore round-trip so the
+     * UI never claims "nobody found" before a search has actually run. */
+    private val _isSearching = MutableStateFlow(false)
+    val isSearching: StateFlow<Boolean> = _isSearching.asStateFlow()
+
     /** Debounced live search — feels instant without a query per keystroke. */
     @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
     val searchResults: StateFlow<List<FriendUser>> = _query
         .debounce(SEARCH_DEBOUNCE_MILLIS)
         .mapLatest { term ->
-            runCatching { friendRepository.search(term) }.getOrDefault(emptyList())
+            val outcome = try {
+                friendRepository.search(term)
+            } catch (exception: FriendException) {
+                // A cancelled search is not a failure — a newer query took
+                // over (the repository wraps cancellation too, so re-check).
+                currentCoroutineContext().ensureActive()
+                _notice.value = exception.error
+                emptyList()
+            }
+            _isSearching.value = false
+            outcome
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
@@ -121,6 +139,8 @@ class FriendsViewModel @Inject constructor(
     val familyEstablished: StateFlow<Boolean> = _familyEstablished.asStateFlow()
 
     fun onQueryChange(value: String) {
+        if (value == _query.value) return
+        _isSearching.value = value.isNotBlank()
         _query.value = value
     }
 
@@ -190,6 +210,7 @@ fun FriendsScreen(
     viewModel: FriendsViewModel = hiltViewModel(),
 ) {
     val query by viewModel.query.collectAsStateWithLifecycle()
+    val isSearching by viewModel.isSearching.collectAsStateWithLifecycle()
     val results by viewModel.searchResults.collectAsStateWithLifecycle()
     val friends by viewModel.friends.collectAsStateWithLifecycle()
     val incoming by viewModel.incoming.collectAsStateWithLifecycle()
@@ -262,6 +283,18 @@ fun FriendsScreen(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.padding(top = MaterialTheme.spacing.small),
                                 )
+
+                                isSearching -> Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = MaterialTheme.spacing.medium),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(24.dp),
+                                        strokeWidth = 2.dp,
+                                    )
+                                }
 
                                 results.isEmpty() -> EmptyHint(
                                     text = stringResource(R.string.friends_search_empty),

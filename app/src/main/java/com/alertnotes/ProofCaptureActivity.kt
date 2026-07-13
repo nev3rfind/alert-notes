@@ -34,6 +34,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -498,8 +499,12 @@ private fun LocationProofFlow(
 @Composable
 private fun PhotoProofFlow(reminderId: Long, onDone: () -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    var captured by remember { mutableStateOf(false) }
-    var captureCount by remember { mutableStateOf(0) }
+    // Saveable so a config change (rotation, dark-mode toggle) while
+    // previewing does not reset the flow and relaunch the camera; the
+    // LaunchedEffect guard below then skips the launch and the preview
+    // re-renders from the on-disk file.
+    var captured by rememberSaveable { mutableStateOf(false) }
+    var captureCount by rememberSaveable { mutableStateOf(0) }
     val captureUri = remember(reminderId) { AckProofStore.captureUriFor(context, reminderId) }
     val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.TakePicture(),

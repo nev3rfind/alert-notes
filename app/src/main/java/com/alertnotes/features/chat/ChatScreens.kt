@@ -29,7 +29,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -47,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.toRoute
@@ -58,6 +58,7 @@ import com.alertnotes.core.ui.components.AppTopBar
 import com.alertnotes.core.ui.components.SearchField
 import com.alertnotes.core.ui.components.SectionCard
 import com.alertnotes.core.ui.theme.spacing
+import com.alertnotes.data.entities.toReminderDrawingOrNull
 import com.alertnotes.domain.model.ChatConversation
 import com.alertnotes.domain.model.ChatMessage
 import com.alertnotes.domain.model.FriendError
@@ -70,6 +71,11 @@ import com.alertnotes.domain.repository.ChatRepository
 import com.alertnotes.domain.repository.FriendRepository
 import com.alertnotes.features.friends.FriendAvatar
 import com.alertnotes.features.friends.FriendNoticeDialog
+import com.alertnotes.features.history.labelRes
+import com.alertnotes.features.sharing.LocationProofDetails
+import com.alertnotes.features.sharing.PhotoProofPreview
+import com.alertnotes.features.sharing.SignaturePreview
+import com.alertnotes.features.sharing.formatResponseDelay
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.time.Instant
 import java.time.LocalDate
@@ -221,9 +227,12 @@ fun ChatScreen(
 
     // Smart delivery: while this conversation is on screen, its pushes are
     // suppressed (locally and server-side) — realtime updates render first.
-    DisposableEffect(Unit) {
+    // Lifecycle-scoped, not composition-scoped: backgrounding the app or
+    // locking the screen (ON_STOP) must lift the suppression too, otherwise
+    // new messages from this partner arrive silently while nothing renders.
+    LifecycleStartEffect(Unit) {
         viewModel.setChatVisible(true)
-        onDispose { viewModel.setChatVisible(false) }
+        onStopOrDispose { viewModel.setChatVisible(false) }
     }
 
     Scaffold(
@@ -544,6 +553,43 @@ private fun ReminderShareCard(
                         share?.let { com.alertnotes.features.sharing.StatusChip(status = it.status) }
                         androidx.compose.material3.TextButton(onClick = onOpen) {
                             Text(text = stringResource(R.string.chat_card_open))
+                        }
+                    }
+                    // Acknowledgement evidence — the same proof renderers the
+                    // sharing surfaces use, so chat can never disagree.
+                    if (share?.ackAt != null) {
+                        Text(
+                            text = listOfNotNull(
+                                stringResource(R.string.sharing_ack_label),
+                                share.ackMethod?.let { stringResource(it.labelRes()) },
+                                share.ackDelaySeconds?.let { formatResponseDelay(it) },
+                            ).joinToString(" · "),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = MaterialTheme.spacing.extraSmall),
+                        )
+                        if (share.ackPhotoUrl.isNotBlank()) {
+                            PhotoProofPreview(url = share.ackPhotoUrl)
+                        }
+                        share.ackSignature.toReminderDrawingOrNull()?.let { signature ->
+                            SignaturePreview(signature = signature)
+                        }
+                        if (share.ackLat != null && share.ackLng != null) {
+                            LocationProofDetails(
+                                latitude = share.ackLat,
+                                longitude = share.ackLng,
+                                accuracyMeters = share.ackAccuracyM,
+                                address = share.ackAddress,
+                            )
+                        }
+                        if (share.ackLocationUnavailable) {
+                            Text(
+                                text = stringResource(
+                                    R.string.chat_evidence_location_unavailable,
+                                ),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.error,
+                            )
                         }
                     }
                     if (share != null &&

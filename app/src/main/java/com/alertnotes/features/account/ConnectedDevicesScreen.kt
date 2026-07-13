@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.PhoneAndroid
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -51,11 +52,12 @@ class ConnectedDevicesViewModel @Inject constructor(
     deviceDataSource: DeviceRemoteDataSource,
 ) : ViewModel() {
 
+    /** `null` means the device registry has not emitted yet (still loading). */
     @OptIn(ExperimentalCoroutinesApi::class)
-    val devices: StateFlow<List<DeviceRemoteDataSource.ConnectedDevice>> =
+    val devices: StateFlow<List<DeviceRemoteDataSource.ConnectedDevice>?> =
         authRepository.authState.flatMapLatest { user ->
             if (user == null) flowOf(emptyList()) else deviceDataSource.observeDevices(user.uid)
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 }
 
 /**
@@ -81,7 +83,10 @@ fun ConnectedDevicesScreen(
         containerColor = MaterialTheme.colorScheme.background,
     ) { innerPadding ->
         Box(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
-            LazyColumn(
+            val deviceList = devices
+            if (deviceList == null) {
+                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+            } else LazyColumn(
                 modifier = Modifier
                     .widthIn(max = 640.dp)
                     .fillMaxSize()
@@ -94,7 +99,7 @@ fun ConnectedDevicesScreen(
             ) {
                 item {
                     SectionCard(title = stringResource(R.string.more_devices_title)) {
-                        if (devices.isEmpty()) {
+                        if (deviceList.isEmpty()) {
                             Text(
                                 text = stringResource(R.string.devices_empty),
                                 style = MaterialTheme.typography.bodyMedium,
@@ -102,7 +107,7 @@ fun ConnectedDevicesScreen(
                                 modifier = Modifier.padding(MaterialTheme.spacing.large),
                             )
                         } else {
-                            devices.forEach { device ->
+                            deviceList.forEach { device ->
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
