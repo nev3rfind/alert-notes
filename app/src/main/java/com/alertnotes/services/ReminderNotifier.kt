@@ -5,7 +5,6 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.media.AudioAttributes
-import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.alertnotes.AlertActivity
@@ -37,6 +36,15 @@ class ReminderNotifier @Inject constructor(
 
     fun ensureChannels() {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
+        // The legacy single-sound channel is superseded by the per-priority
+        // channels below; removing it keeps system settings tidy.
+        manager.deleteNotificationChannel(CHANNEL_ALERTS_LEGACY)
+        val alarmAttributes = AudioAttributes.Builder()
+            // Alarm stream: reminders must ring like alarms (and respect the
+            // alarm volume), not like chat pings.
+            .setUsage(AudioAttributes.USAGE_ALARM)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .build()
         manager.createNotificationChannel(
             NotificationChannel(
                 CHANNEL_ALERTS,
@@ -45,15 +53,20 @@ class ReminderNotifier @Inject constructor(
             ).apply {
                 description = context.getString(R.string.notification_channel_alerts_description)
                 enableVibration(true)
-                // Alarm sound on the alarm stream: reminders must ring like
-                // alarms (and respect the alarm volume), not like chat pings.
-                setSound(
-                    Settings.System.DEFAULT_ALARM_ALERT_URI,
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_ALARM)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                        .build(),
-                )
+                // The bundled Alert Notes signature sound.
+                setSound(rawSoundUri(R.raw.sound_noti), alarmAttributes)
+            },
+        )
+        manager.createNotificationChannel(
+            NotificationChannel(
+                CHANNEL_CRITICAL,
+                context.getString(R.string.notification_channel_critical),
+                NotificationManager.IMPORTANCE_HIGH,
+            ).apply {
+                description = context.getString(R.string.notification_channel_critical_description)
+                enableVibration(true)
+                // Critical reminders always carry the dedicated alarm sound.
+                setSound(rawSoundUri(R.raw.alert_critical), alarmAttributes)
             },
         )
         manager.createNotificationChannel(
@@ -69,6 +82,9 @@ class ReminderNotifier @Inject constructor(
         )
     }
 
+    private fun rawSoundUri(resId: Int): android.net.Uri =
+        android.net.Uri.parse("android.resource://${context.packageName}/$resId")
+
     /** Returns true when the notification was actually handed to the system. */
     fun showAlert(alert: ActiveAlert): Boolean {
         if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) {
@@ -80,10 +96,12 @@ class ReminderNotifier @Inject constructor(
             return false
         }
         val reminder = alert.reminder
-        val channel = if (reminder.soundEnabled || reminder.vibrationEnabled) {
-            CHANNEL_ALERTS
-        } else {
-            CHANNEL_SILENT
+        val channel = when {
+            !reminder.soundEnabled && !reminder.vibrationEnabled -> CHANNEL_SILENT
+            reminder.priority == com.alertnotes.domain.model.ReminderPriority.CRITICAL ->
+                CHANNEL_CRITICAL
+
+            else -> CHANNEL_ALERTS
         }
         val contentIntent = PendingIntent.getActivity(
             context,
@@ -103,7 +121,15 @@ class ReminderNotifier @Inject constructor(
             .setContentTitle(reminder.title)
             .setContentText(reminder.description.ifBlank { null })
             .setCategory(NotificationCompat.CATEGORY_ALARM)
-            .setPriority(NotificationCompat.PRIORITY_MAX)
+            // Low-priority reminders arrive quietly; everything else demands
+            // maximum prominence.
+            .setPriority(
+                if (reminder.priority == com.alertnotes.domain.model.ReminderPriority.LOW) {
+                    NotificationCompat.PRIORITY_DEFAULT
+                } else {
+                    NotificationCompat.PRIORITY_MAX
+                },
+            )
             .setVisibility(
                 if (reminder.showOnLockScreen) {
                     NotificationCompat.VISIBILITY_PUBLIC
@@ -174,7 +200,9 @@ class ReminderNotifier @Inject constructor(
 
     private companion object {
         const val TAG = "ReminderNotifier"
-        const val CHANNEL_ALERTS = "reminder_alerts"
+        const val CHANNEL_ALERTS_LEGACY = "reminder_alerts"
+        const val CHANNEL_ALERTS = "reminder_alerts_noti"
+        const val CHANNEL_CRITICAL = "reminder_alerts_critical"
         const val CHANNEL_SILENT = "reminder_alerts_silent"
         const val NOTIFICATION_ID = 1001
         const val REQUEST_OPEN = 10

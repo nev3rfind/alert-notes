@@ -25,6 +25,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -41,6 +42,7 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -66,6 +68,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -95,6 +98,7 @@ import com.alertnotes.domain.model.DrawingPosition
 import com.alertnotes.domain.model.FloatingCardSize
 import com.alertnotes.domain.model.Reminder
 import com.alertnotes.domain.model.ReminderDrawing
+import com.alertnotes.domain.model.ReminderPriority
 import com.alertnotes.domain.model.SwipeDirection
 import com.alertnotes.features.drawing.DrawingView
 import java.time.Duration
@@ -227,6 +231,7 @@ internal fun FullScreenAlert(
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .criticalAttentionEffects(reminder.priority)
                 .clip(MaterialTheme.shapes.extraLarge)
                 .animatedThemeBackground(reminder.theme)
                 .swipeDismissable(
@@ -236,6 +241,7 @@ internal fun FullScreenAlert(
                     onDismissed = { onDismiss(AcknowledgeMethod.SWIPE, null) },
                 ),
         ) {
+            CriticalBadge(priority = reminder.priority)
             // TRAP-PROOF LAYOUT. Root cause of the 100%-drawing soft-lock:
             // everything lived in one centered, unbounded column, so a large
             // drawing pushed the actions off-screen with no way to scroll.
@@ -675,6 +681,44 @@ private fun AlertActions(
                     onClick = { onDismiss(buttonMethod, null) },
                 )
             }
+        }
+    }
+}
+
+/**
+ * Warning banner pinned to the top of critical alerts — the priority's
+ * badge and icon, unmistakable over any reminder theme.
+ */
+@Composable
+private fun BoxScope.CriticalBadge(priority: ReminderPriority) {
+    if (priority != ReminderPriority.CRITICAL) return
+    Surface(
+        shape = MaterialTheme.shapes.extraLarge,
+        color = MaterialTheme.colorScheme.error,
+        modifier = Modifier
+            .align(Alignment.TopCenter)
+            .padding(top = MaterialTheme.spacing.medium)
+            .zIndex(1f),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(
+                horizontal = MaterialTheme.spacing.medium,
+                vertical = MaterialTheme.spacing.extraSmall,
+            ),
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Warning,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onError,
+                modifier = Modifier.size(16.dp),
+            )
+            Text(
+                text = stringResource(R.string.alert_critical_badge),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onError,
+                modifier = Modifier.padding(start = MaterialTheme.spacing.extraSmall),
+            )
         }
     }
 }

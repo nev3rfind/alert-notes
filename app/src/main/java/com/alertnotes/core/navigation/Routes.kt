@@ -24,9 +24,15 @@ data object FriendsRoute
 @Serializable
 data object FamilyRoute
 
-/** Sharing wizard; [reminderId] preselects the just-saved reminder (-1 = none). */
+/**
+ * Sending wizard; [reminderId] preselects the just-saved reminder (-1 =
+ * none) and [recipientUid] preselects a recipient (chat's Send Reminder).
+ */
 @Serializable
-data class ShareReminderRoute(val reminderId: Long = -1L)
+data class ShareReminderRoute(
+    val reminderId: Long = -1L,
+    val recipientUid: String? = null,
+)
 
 @Serializable
 data object SharedRemindersRoute

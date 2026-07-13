@@ -173,9 +173,11 @@ fun AlertNotesNavHost(
             ReliabilityScreen(onNavigateBack = navController::navigateUp)
         }
         composable<ShareReminderRoute> { entry ->
+            val route = entry.toRoute<ShareReminderRoute>()
             ShareReminderScreen(
                 onNavigateBack = navController::navigateUp,
-                initialReminderId = entry.toRoute<ShareReminderRoute>().reminderId,
+                initialReminderId = route.reminderId,
+                initialRecipientUid = route.recipientUid,
             )
         }
         composable<SharedRemindersRoute> {
@@ -217,6 +219,9 @@ fun AlertNotesNavHost(
             ChatScreen(
                 onNavigateBack = navController::navigateUp,
                 onOpenTracking = { navController.navigate(SharedRemindersRoute) },
+                onSendReminder = { uid ->
+                    navController.navigate(ShareReminderRoute(recipientUid = uid))
+                },
             )
         }
         composable<HistoryRoute> {

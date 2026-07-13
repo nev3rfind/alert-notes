@@ -128,12 +128,8 @@ fun HomeScreen(
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     DashboardHeader()
                 }
-                item(span = { GridItemSpan(maxLineSpan) }) {
-                    ConnectionStatusCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        onClick = onOpenSettings,
-                    )
-                }
+                // Shared Activity leads the dashboard — the online edition's
+                // core feature is visible before anything else.
                 if (!sharingPulse.isEmpty) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         SharingPulseRow(
@@ -170,6 +166,12 @@ fun HomeScreen(
                             onOpen = onOpenSharedReminders,
                         )
                     }
+                }
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    ConnectionStatusCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = onOpenSettings,
+                    )
                 }
                 uiState.pausedUntil?.let { pausedUntil ->
                     item(span = { GridItemSpan(maxLineSpan) }) {

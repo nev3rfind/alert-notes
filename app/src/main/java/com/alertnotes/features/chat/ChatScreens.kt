@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.outlined.NotificationAdd
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -197,6 +198,7 @@ class ChatViewModel @Inject constructor(
 fun ChatScreen(
     onNavigateBack: () -> Unit,
     onOpenTracking: () -> Unit,
+    onSendReminder: (String) -> Unit,
     viewModel: ChatViewModel = hiltViewModel(),
 ) {
     val messages by viewModel.messages.collectAsStateWithLifecycle()
@@ -229,6 +231,18 @@ fun ChatScreen(
             AppTopBar(
                 title = profile?.displayName ?: stringResource(R.string.chat_title),
                 onNavigateBack = onNavigateBack,
+                actions = {
+                    // Send a reminder to this person without leaving the
+                    // conversation — the wizard opens with them preselected.
+                    androidx.compose.material3.IconButton(
+                        onClick = { onSendReminder(viewModel.otherUid) },
+                    ) {
+                        androidx.compose.material3.Icon(
+                            imageVector = androidx.compose.material.icons.Icons.Outlined.NotificationAdd,
+                            contentDescription = stringResource(R.string.chat_send_reminder),
+                        )
+                    }
+                },
             )
         },
         containerColor = MaterialTheme.colorScheme.background,

@@ -466,6 +466,7 @@ private fun ReminderStatusLine(reminder: Reminder, status: ReminderDisplayStatus
     val staticText = buildList {
         add(stringResource(status.labelRes))
         when (reminder.priority) {
+            ReminderPriority.LOW -> add(stringResource(R.string.priority_low))
             ReminderPriority.HIGH -> add(stringResource(R.string.priority_high))
             ReminderPriority.CRITICAL -> add(stringResource(R.string.priority_critical))
             ReminderPriority.NORMAL -> Unit

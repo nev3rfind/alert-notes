@@ -31,12 +31,25 @@ class SocialNotifier @Inject constructor(
         context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
     init {
+        // Superseded by the v2 channel carrying the bundled message sound.
+        manager.deleteNotificationChannel(CHANNEL_CHAT_LEGACY)
         manager.createNotificationChannel(
             NotificationChannel(
                 CHANNEL_CHAT,
                 context.getString(R.string.channel_chat),
                 NotificationManager.IMPORTANCE_HIGH,
-            ).apply { description = context.getString(R.string.channel_chat_description) },
+            ).apply {
+                description = context.getString(R.string.channel_chat_description)
+                setSound(
+                    android.net.Uri.parse(
+                        "android.resource://${context.packageName}/${R.raw.message_receive}",
+                    ),
+                    android.media.AudioAttributes.Builder()
+                        .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION)
+                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build(),
+                )
+            },
         )
         manager.createNotificationChannel(
             NotificationChannel(
@@ -101,7 +114,8 @@ class SocialNotifier @Inject constructor(
         const val TYPE_SHARING = "sharing"
         const val TYPE_SYNC = "sync"
 
-        private const val CHANNEL_CHAT = "social_chat"
+        private const val CHANNEL_CHAT_LEGACY = "social_chat"
+        private const val CHANNEL_CHAT = "social_chat_v2"
         private const val CHANNEL_SOCIAL = "social_relationships"
         private const val CHANNEL_SHARING = "social_sharing"
         private const val SOCIAL_NOTIFICATION_ID = 41_000
