@@ -71,8 +71,10 @@ class MainViewModel @Inject constructor(
      * never set) are not gated: they implicitly stay offline and can opt
      * into online mode from Settings.
      */
+    // Unset mode always gates: first launch (before onboarding) and after
+    // Log Out (which clears the mode) both land on the welcome chooser.
     val needsModeSelection: StateFlow<Boolean?> = settingsRepository.preferences
-        .map { it.appMode == null && !it.onboardingCompleted }
+        .map { it.appMode == null }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.Eagerly,

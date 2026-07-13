@@ -106,6 +106,7 @@ class ReminderEditorViewModel @AssistedInject constructor(
     private val reminderRepository: ReminderRepository,
     private val coordinator: ReminderSchedulingCoordinator,
     private val settingsRepository: com.alertnotes.domain.repository.SettingsRepository,
+    private val templateRepository: com.alertnotes.domain.repository.TemplateRepository,
     private val timeProvider: TimeProvider,
     private val logger: AppLogger,
 ) : ViewModel() {
@@ -299,6 +300,27 @@ class ReminderEditorViewModel @AssistedInject constructor(
         }
     }
 
+    /** Captures the draft's behaviour (never its schedule) as a template. */
+    fun saveAsTemplate() {
+        val state = _uiState.value as? EditorUiState.Editing ?: return
+        viewModelScope.launch {
+            runCatching {
+                templateRepository.saveCustom(
+                    com.alertnotes.domain.model.ReminderTemplate(
+                        id = java.util.UUID.randomUUID().toString(),
+                        name = state.draft.title.trim().ifBlank { DEFAULT_TEMPLATE_NAME },
+                        title = state.draft.title.trim(),
+                        description = state.draft.description.trim(),
+                        priority = state.draft.priority,
+                        type = state.draft.type,
+                        acknowledgement = state.draft.acknowledgement,
+                        theme = state.draft.theme,
+                    ),
+                )
+            }.onFailure { logger.e(TAG, "Save as template failed", it) }
+        }
+    }
+
     /** Saves an independent copy of the current draft under [copyTitle]. */
     fun duplicate(copyTitle: String) {
         val state = _uiState.value as? EditorUiState.Editing ?: return
@@ -412,6 +434,7 @@ class ReminderEditorViewModel @AssistedInject constructor(
 
     private companion object {
         const val TAG = "ReminderEditor"
+        const val DEFAULT_TEMPLATE_NAME = "My template"
         const val MAX_MINUTES = 10_080L // one week
         const val MAX_HOURS = 720L // thirty days
         const val DEFAULT_DAY_OF_MONTH = 1

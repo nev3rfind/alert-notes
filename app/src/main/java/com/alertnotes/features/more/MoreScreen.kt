@@ -15,6 +15,7 @@ import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.CloudSync
 import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material.icons.outlined.NotificationsNone
@@ -74,6 +75,7 @@ fun MoreScreen(
     onOpenInbox: () -> Unit,
     onOpenNotifications: () -> Unit,
     onOpenMessages: () -> Unit,
+    onOpenTemplates: () -> Unit,
     onOpenDevices: () -> Unit,
     onOpenShareReminder: () -> Unit,
     onOpenSharedReminders: () -> Unit,
@@ -159,6 +161,13 @@ fun MoreScreen(
                             supportingText = stringResource(R.string.more_history_subtitle),
                             leadingIcon = Icons.Outlined.History,
                             onClick = onOpenHistory,
+                            trailingContent = { Chevron() },
+                        )
+                        AppListItem(
+                            title = stringResource(R.string.templates_title),
+                            supportingText = stringResource(R.string.templates_row_subtitle),
+                            leadingIcon = Icons.Outlined.Bookmark,
+                            onClick = onOpenTemplates,
                             trailingContent = { Chevron() },
                         )
                     }
@@ -259,7 +268,7 @@ fun MoreScreen(
 /** Online-account state + sign-out; the More page itself stays stateless. */
 @HiltViewModel
 class MoreViewModel @Inject constructor(
-    settingsRepository: SettingsRepository,
+    private val settingsRepository: SettingsRepository,
     private val authRepository: AuthRepository,
 ) : ViewModel() {
 
@@ -273,6 +282,8 @@ class MoreViewModel @Inject constructor(
     fun logOut() {
         viewModelScope.launch {
             runCatching { authRepository.signOut() }
+            // Back to the welcome chooser: Offline Mode or Online Mode.
+            runCatching { settingsRepository.clearAppMode() }
         }
     }
 }

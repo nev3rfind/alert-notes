@@ -54,6 +54,22 @@
     <string name="home_shared_open_all">Open tracking</string>
     <string name="home_recently_completed">Recently completed</string>
 
+    <!-- Templates + quick actions -->
+    <string name="templates_title">Reminder templates</string>
+    <string name="templates_row_subtitle">Start from a ready-made reminder</string>
+    <string name="templates_builtin_section">Built-in</string>
+    <string name="templates_custom_section">My templates</string>
+    <string name="templates_custom_empty">Save any reminder as a template from the editor\'s ⋮ menu — it will appear here.</string>
+    <string name="templates_use">Use</string>
+    <string name="templates_duplicate">Duplicate</string>
+    <string name="editor_save_as_template">Save as template</string>
+    <string name="quick_action_open">Open quick actions</string>
+    <string name="quick_action_close">Close quick actions</string>
+    <string name="quick_action_create">Create reminder</string>
+    <string name="quick_action_send">Send a reminder</string>
+    <string name="quick_action_template">Use a template</string>
+    <string name="quick_action_message">Send a message</string>
+
     <!-- Priorities + bundled sounds -->
     <string name="priority_low">Low</string>
     <string name="editor_critical_explanation">This reminder uses a full-screen attention alert with enhanced visual effects and a critical notification sound.</string>

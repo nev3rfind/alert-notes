@@ -75,6 +75,8 @@ fun AlertNotesNavHost(
                 onOpenInbox = { navController.navigate(InboxRoute) },
                 onOpenMessages = { navController.navigateToTopLevel(MessagesRoute) },
                 onOpenNotifications = { navController.navigate(NotificationCentreRoute) },
+                onOpenSendReminder = { navController.navigate(ShareReminderRoute()) },
+                onOpenTemplates = { navController.navigate(TemplatesRoute) },
             )
         }
         composable<CalendarRoute> {
@@ -136,6 +138,7 @@ fun AlertNotesNavHost(
                 onOpenInbox = { navController.navigate(InboxRoute) },
                 onOpenNotifications = { navController.navigate(NotificationCentreRoute) },
                 onOpenMessages = { navController.navigate(MessagesRoute) },
+                onOpenTemplates = { navController.navigate(TemplatesRoute) },
                 onOpenDevices = { navController.navigate(ConnectedDevicesRoute) },
                 onOpenShareReminder = { navController.navigate(ShareReminderRoute()) },
                 onOpenSharedReminders = { navController.navigate(SharedRemindersRoute) },
@@ -195,6 +198,14 @@ fun AlertNotesNavHost(
                 onOpenSharedReminders = { navController.navigate(SharedRemindersRoute) },
                 onOpenFriends = { navController.navigateToTopLevel(FriendsRoute) },
                 onOpenMessages = { navController.navigateToTopLevel(MessagesRoute) },
+            )
+        }
+        composable<TemplatesRoute> {
+            com.alertnotes.features.templates.TemplatesScreen(
+                onNavigateBack = navController::navigateUp,
+                onOpenEditor = { reminderId ->
+                    navController.navigate(ReminderEditorRoute(reminderId))
+                },
             )
         }
         composable<ConnectedDevicesRoute> {

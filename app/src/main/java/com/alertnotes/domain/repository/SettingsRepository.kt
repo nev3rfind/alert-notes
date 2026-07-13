@@ -27,6 +27,9 @@ interface SettingsRepository {
 
     suspend fun setAppMode(mode: AppMode)
 
+    /** Unsets the mode choice — the welcome chooser gates the app again. */
+    suspend fun clearAppMode()
+
     /** Null resumes; [UserPreferences.PAUSE_INDEFINITE] pauses until resumed. */
     suspend fun setPausedUntil(until: java.time.Instant?)
 }

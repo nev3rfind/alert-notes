@@ -82,6 +82,11 @@ abstract class BindingsModule {
     ): com.alertnotes.domain.repository.NotificationCentreRepository
 
     @Binds
+    abstract fun bindTemplateRepository(
+        impl: com.alertnotes.data.repository.TemplateRepositoryImpl,
+    ): com.alertnotes.domain.repository.TemplateRepository
+
+    @Binds
     abstract fun bindReminderScheduler(impl: AlarmManagerReminderScheduler): ReminderScheduler
 
     @Binds

@@ -249,7 +249,7 @@ private fun EditorActions(
     ) {
         Text(text = stringResource(R.string.action_save))
     }
-    if (editing?.isNew == false) {
+    if (editing != null) {
         var menuExpanded by remember { mutableStateOf(false) }
         Box {
             IconButton(onClick = { menuExpanded = true }) {
@@ -260,15 +260,31 @@ private fun EditorActions(
             }
             DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
                 DropdownMenuItem(
-                    text = { Text(text = stringResource(R.string.action_duplicate)) },
+                    text = { Text(text = stringResource(R.string.editor_save_as_template)) },
                     leadingIcon = {
-                        Icon(imageVector = Icons.Outlined.ContentCopy, contentDescription = null)
+                        Icon(
+                            imageVector = androidx.compose.material.icons.Icons.Outlined.ContentCopy,
+                            contentDescription = null,
+                        )
                     },
+                    enabled = editing.validation.isValid,
                     onClick = {
                         menuExpanded = false
-                        viewModel.duplicate(copyTitle)
+                        viewModel.saveAsTemplate()
                     },
                 )
+                if (!editing.isNew) {
+                    DropdownMenuItem(
+                        text = { Text(text = stringResource(R.string.action_duplicate)) },
+                        leadingIcon = {
+                            Icon(imageVector = Icons.Outlined.ContentCopy, contentDescription = null)
+                        },
+                        onClick = {
+                            menuExpanded = false
+                            viewModel.duplicate(copyTitle)
+                        },
+                    )
+                }
             }
         }
     }

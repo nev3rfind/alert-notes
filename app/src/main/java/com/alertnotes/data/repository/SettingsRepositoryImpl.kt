@@ -44,6 +44,10 @@ class SettingsRepositoryImpl @Inject constructor(
         dataSource.setAppMode(mode)
     }
 
+    override suspend fun clearAppMode() {
+        dataSource.clearAppMode()
+    }
+
     override suspend fun setPausedUntil(until: java.time.Instant?) {
         dataSource.setPausedUntil(until)
     }

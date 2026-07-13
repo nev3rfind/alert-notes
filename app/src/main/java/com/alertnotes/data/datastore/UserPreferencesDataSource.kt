@@ -62,6 +62,11 @@ class UserPreferencesDataSource @Inject constructor(
         dataStore.edit { it[Keys.APP_MODE] = mode.name }
     }
 
+    /** Log-out flow: unset mode so the welcome chooser gates the app again. */
+    suspend fun clearAppMode() {
+        dataStore.edit { it.remove(Keys.APP_MODE) }
+    }
+
     suspend fun setPausedUntil(until: Instant?) {
         dataStore.edit { preferences ->
             if (until == null) {

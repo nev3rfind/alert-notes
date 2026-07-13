@@ -18,8 +18,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
@@ -38,10 +40,14 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -95,6 +101,8 @@ fun HomeScreen(
     onOpenInbox: () -> Unit,
     onOpenMessages: () -> Unit,
     onOpenNotifications: () -> Unit,
+    onOpenSendReminder: () -> Unit,
+    onOpenTemplates: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -115,6 +123,14 @@ fun HomeScreen(
             )
         },
         containerColor = MaterialTheme.colorScheme.background,
+        floatingActionButton = {
+            QuickActionsFab(
+                onCreateReminder = onCreateReminder,
+                onSendReminder = onOpenSendReminder,
+                onUseTemplate = onOpenTemplates,
+                onSendMessage = onOpenMessages,
+            )
+        },
     ) { innerPadding ->
         Box(
             modifier = Modifier
@@ -243,6 +259,110 @@ fun HomeScreen(
         }
     }
 }
+
+// region Quick actions FAB
+
+/**
+ * The global "+" button: one tap fans out the four fastest paths — create
+ * a reminder, send one, start from a template, or message someone. Labels
+ * ride beside small FABs; the plus rotates into a close affordance.
+ */
+@Composable
+private fun QuickActionsFab(
+    onCreateReminder: () -> Unit,
+    onSendReminder: () -> Unit,
+    onUseTemplate: () -> Unit,
+    onSendMessage: () -> Unit,
+) {
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    val rotation by animateFloatAsState(
+        targetValue = if (expanded) 45f else 0f,
+        label = "fabRotation",
+    )
+    Column(horizontalAlignment = Alignment.End) {
+        androidx.compose.animation.AnimatedVisibility(
+            visible = expanded,
+            enter = androidx.compose.animation.fadeIn() +
+                androidx.compose.animation.expandVertically(expandFrom = Alignment.Bottom),
+            exit = androidx.compose.animation.fadeOut() +
+                androidx.compose.animation.shrinkVertically(shrinkTowards = Alignment.Bottom),
+        ) {
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
+            ) {
+                QuickActionRow(
+                    labelRes = R.string.quick_action_create,
+                    icon = Icons.Filled.Add,
+                    onClick = { expanded = false; onCreateReminder() },
+                )
+                QuickActionRow(
+                    labelRes = R.string.quick_action_send,
+                    icon = Icons.Outlined.Notifications,
+                    onClick = { expanded = false; onSendReminder() },
+                )
+                QuickActionRow(
+                    labelRes = R.string.quick_action_template,
+                    icon = androidx.compose.material.icons.Icons.Outlined.Bookmark,
+                    onClick = { expanded = false; onUseTemplate() },
+                )
+                QuickActionRow(
+                    labelRes = R.string.quick_action_message,
+                    icon = androidx.compose.material.icons.Icons.Outlined.ChatBubbleOutline,
+                    onClick = { expanded = false; onSendMessage() },
+                )
+                Spacer(modifier = Modifier.height(MaterialTheme.spacing.small))
+            }
+        }
+        androidx.compose.material3.FloatingActionButton(
+            onClick = { expanded = !expanded },
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Add,
+                contentDescription = stringResource(
+                    if (expanded) R.string.quick_action_close else R.string.quick_action_open,
+                ),
+                modifier = Modifier.graphicsLayer { rotationZ = rotation },
+            )
+        }
+    }
+}
+
+@Composable
+private fun QuickActionRow(
+    labelRes: Int,
+    icon: ImageVector,
+    onClick: () -> Unit,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Surface(
+            shape = MaterialTheme.shapes.medium,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            shadowElevation = 2.dp,
+        ) {
+            Text(
+                text = stringResource(labelRes),
+                style = MaterialTheme.typography.labelMedium,
+                modifier = Modifier.padding(
+                    horizontal = MaterialTheme.spacing.medium,
+                    vertical = MaterialTheme.spacing.extraSmall,
+                ),
+            )
+        }
+        Spacer(modifier = Modifier.width(MaterialTheme.spacing.small))
+        androidx.compose.material3.SmallFloatingActionButton(
+            onClick = onClick,
+            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+            contentColor = MaterialTheme.colorScheme.primary,
+        ) {
+            Icon(imageVector = icon, contentDescription = null)
+        }
+    }
+}
+
+// endregion
 
 // region Sharing dashboard cards
 

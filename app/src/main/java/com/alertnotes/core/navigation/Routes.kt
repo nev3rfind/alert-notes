@@ -47,6 +47,9 @@ data object NotificationCentreRoute
 data object ConnectedDevicesRoute
 
 @Serializable
+data object TemplatesRoute
+
+@Serializable
 data object MessagesRoute
 
 /** 1:1 conversation with [otherUid]. */
