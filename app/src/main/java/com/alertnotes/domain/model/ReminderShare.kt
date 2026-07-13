@@ -100,6 +100,9 @@ data class ReminderShare(
     val ackLng: Double? = null,
     val ackAccuracyM: Double? = null,
     val ackAddress: String = "",
+    /** True when the reminder was closed without an obtainable location. */
+    val ackLocationUnavailable: Boolean = false,
+    val ackLocationNote: String = "",
     val createdAt: Instant?,
     val respondedAt: Instant?,
     val scheduledAt: Instant?,

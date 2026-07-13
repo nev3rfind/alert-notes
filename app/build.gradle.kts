@@ -94,6 +94,9 @@ dependencies {
     implementation(libs.firebase.firestore)
     implementation(libs.firebase.storage)
     implementation(libs.kotlinx.coroutines.play.services)
+    // Fused Location Provider: the reliable path to a fix (last-known +
+    // high-accuracy updates) for location-proof acknowledgements.
+    implementation(libs.play.services.location)
     implementation(libs.coil.compose)
     implementation("com.google.firebase:firebase-messaging")
 }

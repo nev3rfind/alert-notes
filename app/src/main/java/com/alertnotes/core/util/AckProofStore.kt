@@ -20,16 +20,26 @@ object AckProofStore {
 
     private val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
 
-    /** One confirmed location proof, captured at acknowledgement time. */
+    /**
+     * One location-proof outcome captured at acknowledgement time. When
+     * acquisition failed and the user chose to close the reminder anyway,
+     * [available] is false and the failure details travel to the sender
+     * instead of coordinates — tracking must never fake a success.
+     */
     @kotlinx.serialization.Serializable
     data class LocationProof(
-        val latitude: Double,
-        val longitude: Double,
-        val accuracyMeters: Double,
+        val available: Boolean = true,
+        val latitude: Double = 0.0,
+        val longitude: Double = 0.0,
+        val accuracyMeters: Double = 0.0,
+        val altitudeMeters: Double? = null,
+        val speedMps: Double? = null,
         val address: String = "",
         val city: String = "",
         val region: String = "",
         val country: String = "",
+        val failureReason: String = "",
+        val attemptSeconds: Long = 0,
         val capturedAtMillis: Long,
     )
 

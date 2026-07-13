@@ -421,15 +421,26 @@ class ReminderSharingRepositoryImpl @Inject constructor(
         if (method == com.alertnotes.domain.model.AcknowledgeMethod.LOCATION) {
             com.alertnotes.core.util.AckProofStore.consumeLocationProof(context, localId)
                 ?.let { proof ->
-                    fields["ackLat"] = proof.latitude
-                    fields["ackLng"] = proof.longitude
-                    fields["ackAccuracyM"] = proof.accuracyMeters
-                    fields["ackAddress"] = listOf(
-                        proof.address,
-                        proof.city,
-                        proof.region,
-                        proof.country,
-                    ).filter { it.isNotBlank() }.joinToString(", ")
+                    if (proof.available) {
+                        fields["ackLat"] = proof.latitude
+                        fields["ackLng"] = proof.longitude
+                        fields["ackAccuracyM"] = proof.accuracyMeters
+                        proof.altitudeMeters?.let { fields["ackAltitudeM"] = it }
+                        proof.speedMps?.let { fields["ackSpeedMps"] = it }
+                        fields["ackAddress"] = listOf(
+                            proof.address,
+                            proof.city,
+                            proof.region,
+                            proof.country,
+                        ).filter { it.isNotBlank() }.joinToString(", ")
+                        fields["ackLocationUnavailable"] = false
+                    } else {
+                        // Honest tracking: the reminder was acknowledged but
+                        // the location could not be obtained — never fake it.
+                        fields["ackLocationUnavailable"] = true
+                        fields["ackLocationNote"] =
+                            "${proof.failureReason} (${proof.attemptSeconds}s)"
+                    }
                 }
         }
         shareReference(share.id).set(fields, SetOptions.merge()).await()
@@ -704,6 +715,8 @@ class ReminderSharingRepositoryImpl @Inject constructor(
             ackLng = getDouble("ackLng"),
             ackAccuracyM = getDouble("ackAccuracyM"),
             ackAddress = getString("ackAddress").orEmpty(),
+            ackLocationUnavailable = getBoolean("ackLocationUnavailable") == true,
+            ackLocationNote = getString("ackLocationNote").orEmpty(),
             createdAt = instantField("createdAt"),
             respondedAt = instantField("respondedAt"),
             scheduledAt = instantField("scheduledAt"),

@@ -764,6 +764,14 @@ private fun OutgoingShareCard(
                     address = share.ackAddress,
                 )
             }
+            if (share.ackLocationUnavailable) {
+                Text(
+                    text = stringResource(R.string.sharing_ack_location_unavailable) +
+                        share.ackLocationNote.takeIf { it.isNotBlank() }?.let { " — $it" }.orEmpty(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
         }
         if (share.updateRequested && share.hasPendingUpdate) {
             Text(
@@ -887,7 +895,7 @@ private fun PhotoProofPreview(url: String) {
 
 private const val PHOTO_PREVIEW_ASPECT = 4f / 3f
 
-/** Location proof: coordinates, address, accuracy, and a jump to Maps. */
+/** Location proof: mini map, coordinates, address, and a jump to Maps. */
 @Composable
 private fun LocationProofDetails(
     latitude: Double,
@@ -896,6 +904,7 @@ private fun LocationProofDetails(
     address: String,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
+    OsmMiniMap(latitude = latitude, longitude = longitude)
     ReviewLine(
         label = stringResource(R.string.sharing_ack_location),
         value = "%.5f, %.5f".format(latitude, longitude) +
@@ -923,6 +932,61 @@ private fun LocationProofDetails(
         Text(text = stringResource(R.string.sharing_open_maps))
     }
 }
+
+/**
+ * Keyless mini map: the OpenStreetMap tile containing the proof location,
+ * attributed per OSM policy. Tapping opens the exact point in Google Maps.
+ */
+@Composable
+private fun OsmMiniMap(latitude: Double, longitude: Double) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val zoom = 15
+    val n = 1 shl zoom
+    val x = ((longitude + 180.0) / 360.0 * n).toInt().coerceIn(0, n - 1)
+    val latRad = Math.toRadians(latitude)
+    val y = (
+        (1.0 - kotlin.math.ln(kotlin.math.tan(latRad) + 1.0 / kotlin.math.cos(latRad)) / Math.PI) /
+            2.0 * n
+        ).toInt().coerceIn(0, n - 1)
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = MaterialTheme.spacing.extraSmall)
+            .aspectRatio(MAP_PREVIEW_ASPECT)
+            .clip(MaterialTheme.shapes.small)
+            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+            .clickable { openInMaps(context, latitude, longitude) },
+    ) {
+        coil.compose.AsyncImage(
+            model = "https://tile.openstreetmap.org/$zoom/$x/$y.png",
+            contentDescription = stringResource(R.string.sharing_ack_map_cd),
+            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+            modifier = Modifier.fillMaxSize(),
+        )
+        Text(
+            text = stringResource(R.string.sharing_map_attribution),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.7f))
+                .padding(horizontal = MaterialTheme.spacing.extraSmall),
+        )
+    }
+}
+
+private fun openInMaps(context: android.content.Context, latitude: Double, longitude: Double) {
+    runCatching {
+        context.startActivity(
+            android.content.Intent(
+                android.content.Intent.ACTION_VIEW,
+                android.net.Uri.parse("geo:$latitude,$longitude?q=$latitude,$longitude"),
+            ),
+        )
+    }
+}
+
+private const val MAP_PREVIEW_ASPECT = 2.4f
 
 /** Human response delay: seconds under a minute, then minutes, then hours. */
 private fun formatResponseDelay(seconds: Long): String = when {
