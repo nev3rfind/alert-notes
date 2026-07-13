@@ -867,7 +867,7 @@ internal fun PhotoProofPreview(url: String) {
     var showFullScreen by androidx.compose.runtime.remember {
         androidx.compose.runtime.mutableStateOf(false)
     }
-    coil.compose.AsyncImage(
+    coil.compose.SubcomposeAsyncImage(
         model = url,
         contentDescription = stringResource(R.string.sharing_ack_photo_cd),
         contentScale = androidx.compose.ui.layout.ContentScale.Crop,
@@ -878,6 +878,15 @@ internal fun PhotoProofPreview(url: String) {
             .clip(MaterialTheme.shapes.small)
             .background(MaterialTheme.colorScheme.surfaceContainerHighest)
             .clickable { showFullScreen = true },
+        loading = {
+            Box(modifier = Modifier.fillMaxSize()) {
+                androidx.compose.material3.CircularProgressIndicator(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .padding(MaterialTheme.spacing.small),
+                )
+            }
+        },
     )
     if (showFullScreen) {
         androidx.compose.ui.window.Dialog(onDismissRequest = { showFullScreen = false }) {
@@ -1036,6 +1045,13 @@ internal fun LocationProofDetails(
 /**
  * Keyless mini map: the OpenStreetMap tile containing the proof location,
  * attributed per OSM policy. Tapping opens the exact point in Google Maps.
+ *
+ * Tile-usage-policy compliance: OSM actively blocks requests carrying a
+ * generic HTTP client User-Agent ("Access blocked" tiles) — every request
+ * therefore identifies this application explicitly. Volume stays trivially
+ * low by design: exactly one z15 tile per acknowledgement, memory- and
+ * disk-cached by Coil, so recompositions and repeat visits reuse the
+ * cached tile instead of re-requesting it.
  */
 @Composable
 private fun OsmMiniMap(latitude: Double, longitude: Double) {
@@ -1048,6 +1064,7 @@ private fun OsmMiniMap(latitude: Double, longitude: Double) {
         (1.0 - kotlin.math.ln(kotlin.math.tan(latRad) + 1.0 / kotlin.math.cos(latRad)) / Math.PI) /
             2.0 * n
         ).toInt().coerceIn(0, n - 1)
+    var attempt by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(0) }
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -1057,11 +1074,41 @@ private fun OsmMiniMap(latitude: Double, longitude: Double) {
             .background(MaterialTheme.colorScheme.surfaceContainerHighest)
             .clickable { openInMaps(context, latitude, longitude) },
     ) {
-        coil.compose.AsyncImage(
-            model = "https://tile.openstreetmap.org/$zoom/$x/$y.png",
+        coil.compose.SubcomposeAsyncImage(
+            model = coil.request.ImageRequest.Builder(context)
+                .data("https://tile.openstreetmap.org/$zoom/$x/$y.png")
+                // Identify ourselves per the OSM tile usage policy.
+                .setHeader("User-Agent", OSM_USER_AGENT)
+                .memoryCacheKey("osm_${zoom}_${x}_${y}_$attempt")
+                .build(),
             contentDescription = stringResource(R.string.sharing_ack_map_cd),
             contentScale = androidx.compose.ui.layout.ContentScale.Crop,
             modifier = Modifier.fillMaxSize(),
+            loading = {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    androidx.compose.material3.CircularProgressIndicator(
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .padding(MaterialTheme.spacing.small),
+                    )
+                }
+            },
+            error = {
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Text(
+                        text = stringResource(R.string.sharing_map_error),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    TextButton(onClick = { attempt++ }) {
+                        Text(text = stringResource(R.string.proof_retry))
+                    }
+                }
+            },
         )
         Text(
             text = stringResource(R.string.sharing_map_attribution),
@@ -1074,6 +1121,10 @@ private fun OsmMiniMap(latitude: Double, longitude: Double) {
         )
     }
 }
+
+/** OSM policy requires a valid, identifying User-Agent per application. */
+private const val OSM_USER_AGENT =
+    "AlertNotes/1.0 (Android; https://github.com/nev3rfind/alert-notes)"
 
 private fun openInMaps(context: android.content.Context, latitude: Double, longitude: Double) {
     runCatching {

@@ -173,6 +173,7 @@
     <string name="sharing_ack_location_unavailable">Location proof unavailable</string>
     <string name="sharing_ack_map_cd">Map of the acknowledgement location — tap to open in Google Maps</string>
     <string name="sharing_map_attribution">© OpenStreetMap</string>
+    <string name="sharing_map_error">Map couldn\'t load</string>
     <string name="sharing_ack_location">Location</string>
     <string name="sharing_open_maps">Open in Google Maps</string>
     <string name="chat_system_assigned_mine">You assigned a reminder</string>

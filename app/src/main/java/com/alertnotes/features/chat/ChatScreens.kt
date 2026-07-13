@@ -622,8 +622,10 @@ class MessagesViewModel @Inject constructor(
     private val _query = MutableStateFlow("")
     val query: StateFlow<String> = _query.asStateFlow()
 
-    val conversations = chatRepository.conversations
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    /** `null` until the first snapshot arrives — the screen shows loading. */
+    val conversations: StateFlow<List<ChatConversation>?> = chatRepository.conversations
+        .map<List<ChatConversation>, List<ChatConversation>?> { it }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     fun onQueryChange(value: String) {
         _query.value = value
@@ -642,7 +644,9 @@ fun MessagesScreen(
     val query by viewModel.query.collectAsStateWithLifecycle()
     val conversations by viewModel.conversations.collectAsStateWithLifecycle()
     val zone = ZoneId.systemDefault()
-    val visible = conversations.filter {
+    // Loading (null) renders neither the empty state nor stale content.
+    val loaded = conversations
+    val visible = loaded.orEmpty().filter {
         query.isBlank() || it.profile.displayName.contains(query, ignoreCase = true) ||
             it.profile.username.contains(query, ignoreCase = true)
     }
@@ -679,7 +683,20 @@ fun MessagesScreen(
                         placeholder = stringResource(R.string.inbox_search_hint),
                     )
                 }
-                if (visible.isEmpty()) {
+                if (loaded == null) {
+                    // First snapshot still in flight — never a false "empty".
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = MaterialTheme.spacing.huge),
+                        ) {
+                            androidx.compose.material3.CircularProgressIndicator(
+                                modifier = Modifier.align(Alignment.Center),
+                            )
+                        }
+                    }
+                } else if (visible.isEmpty()) {
                     item {
                         Column(
                             modifier = Modifier
