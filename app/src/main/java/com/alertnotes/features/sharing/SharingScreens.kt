@@ -51,6 +51,7 @@ import com.alertnotes.R
 import com.alertnotes.core.extensions.toDisplayDateTime
 import com.alertnotes.core.ui.components.AppTopBar
 import com.alertnotes.core.ui.components.PrimaryButton
+import com.alertnotes.core.ui.components.SearchField
 import com.alertnotes.core.ui.components.SectionCard
 import com.alertnotes.core.ui.theme.spacing
 import com.alertnotes.domain.model.FriendError
@@ -161,6 +162,8 @@ fun ShareReminderScreen(
         mutableStateOf(setOfNotNull(initialRecipientUid))
     }
     var ownership by rememberSaveable { mutableStateOf(ReminderOwnership.ME_AND_RECIPIENTS) }
+    var reminderQuery by rememberSaveable { mutableStateOf("") }
+    var visibleReminderCount by rememberSaveable { mutableStateOf(5) }
 
     val selectedReminder = reminders.firstOrNull { it.id == selectedReminderId }
     val sendsToOthers = ownership != ReminderOwnership.ONLY_ME
@@ -196,15 +199,47 @@ fun ShareReminderScreen(
                                 modifier = Modifier.padding(MaterialTheme.spacing.large),
                             )
                         } else {
-                            reminders.take(REMINDER_PICK_LIMIT).forEach { reminder ->
-                                SelectableRow(
-                                    title = reminder.title,
-                                    subtitle = reminder.nextTriggerAt
-                                        ?.toDisplayDateTime(ZoneId.systemDefault())
-                                        ?: stringResource(R.string.editor_status_none),
-                                    selected = reminder.id == selectedReminderId,
-                                    onClick = { selectedReminderId = reminder.id },
+                            SearchField(
+                                query = reminderQuery,
+                                onQueryChange = {
+                                    reminderQuery = it
+                                    visibleReminderCount = 5
+                                },
+                                placeholder = stringResource(R.string.sharing_search_reminders),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(
+                                        horizontal = MaterialTheme.spacing.large,
+                                        vertical = MaterialTheme.spacing.small,
+                                    ),
+                            )
+                            val matching = reminders.filter { it.matchesQuery(reminderQuery) }
+                            if (matching.isEmpty()) {
+                                Text(
+                                    text = stringResource(R.string.sharing_search_empty),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(MaterialTheme.spacing.large),
                                 )
+                            } else {
+                                matching.take(visibleReminderCount).forEach { reminder ->
+                                    SelectableRow(
+                                        title = reminder.title,
+                                        subtitle = reminder.nextTriggerAt
+                                            ?.toDisplayDateTime(ZoneId.systemDefault())
+                                            ?: stringResource(R.string.editor_status_none),
+                                        selected = reminder.id == selectedReminderId,
+                                        onClick = { selectedReminderId = reminder.id },
+                                    )
+                                }
+                                if (matching.size > visibleReminderCount) {
+                                    TextButton(
+                                        onClick = { visibleReminderCount += 5 },
+                                        modifier = Modifier.fillMaxWidth(),
+                                    ) {
+                                        Text(text = stringResource(R.string.sharing_load_more))
+                                    }
+                                }
                             }
                         }
                     }
@@ -1143,7 +1178,5 @@ private fun ShareStatus.label(): String = stringResource(
         ShareStatus.CANCELLED -> R.string.sharing_status_cancelled
     },
 )
-
-private const val REMINDER_PICK_LIMIT = 25
 
 // endregion

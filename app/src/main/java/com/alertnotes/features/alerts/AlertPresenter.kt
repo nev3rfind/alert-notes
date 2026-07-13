@@ -114,6 +114,22 @@ class AlertPresenter @Inject constructor(
                 dismiss(alert, AcknowledgeMethod.AUTO)
             }
         }
+        // Proof completion runs HERE, at process level. The alert UI is
+        // deliberately suspended (renders nothing) while a camera/location
+        // proof is captured — so a collector inside the composition would
+        // never see the confirmation. That was the camera confirm loop:
+        // the result was emitted while no UI collector existed, evaporated
+        // (no replay), and the untouched alert simply reappeared.
+        scope.launch {
+            com.alertnotes.services.AcknowledgementSession.results.collect { result ->
+                if (!result.confirmed) return@collect
+                val alert = activeAlert.value ?: return@collect
+                if (alert.reminder.id == result.reminderId) {
+                    logger.d(TAG, "Proof confirmed (${result.method}) — dismissing ${alert.entryId}")
+                    dismiss(alert, result.method)
+                }
+            }
+        }
     }
 
     /**

@@ -654,7 +654,6 @@ private fun AlertActions(
                     label = stringResource(R.string.alert_photo_capture),
                     spec = spec,
                     compact = compact,
-                    onDismiss = onDismiss,
                 )
                 GestureHint(text = stringResource(R.string.alert_photo_hint), spec = spec)
             }
@@ -667,7 +666,6 @@ private fun AlertActions(
                     label = stringResource(R.string.alert_location_capture),
                     spec = spec,
                     compact = compact,
-                    onDismiss = onDismiss,
                 )
                 GestureHint(text = stringResource(R.string.alert_location_hint), spec = spec)
             }
@@ -748,10 +746,11 @@ private fun BoxScope.CriticalBadge(priority: ReminderPriority) {
  * Proof-capture acknowledgement (camera or location). The capture runs in
  * [com.alertnotes.ProofCaptureActivity] — a NORMAL-launchMode task, because
  * this singleInstance alert activity cannot receive cross-task results —
- * and the outcome returns through [AcknowledgementSession], which also
- * makes the dispatcher stand down so the alert cannot re-front itself over
- * the camera. The alert is dismissed ONLY after the user confirms the
- * proof; cancelling returns to the alert exactly as it was.
+ * and the outcome returns through [AcknowledgementSession]. Completion is
+ * handled by the PRESENTER (process level), never here: this button leaves
+ * the composition the moment the alert suspends for capture, so a local
+ * collector would miss the confirmation entirely. Cancelling returns to
+ * the alert exactly as it was.
  */
 @Composable
 private fun ProofCaptureButton(
@@ -761,16 +760,8 @@ private fun ProofCaptureButton(
     label: String,
     spec: ReminderThemeSpec,
     compact: Boolean,
-    onDismiss: (AcknowledgeMethod, ReminderDrawing?) -> Unit,
 ) {
     val context = LocalContext.current
-    LaunchedEffect(reminderId, method) {
-        AcknowledgementSession.results.collect { result ->
-            if (result.reminderId == reminderId && result.confirmed && result.method == method) {
-                onDismiss(method, null)
-            }
-        }
-    }
     AlertPillButton(
         label = label,
         enabled = true,

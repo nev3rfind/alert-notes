@@ -954,6 +954,9 @@
     <string name="sharing_mode_family">Family</string>
     <string name="sharing_mode_family_hint">Depending on your family permissions, reminders may activate automatically without approval.</string>
     <string name="sharing_no_reminders">No reminders yet — create one first, then share it here.</string>
+    <string name="sharing_search_reminders">Search your reminders</string>
+    <string name="sharing_search_empty">No reminders match your search.</string>
+    <string name="sharing_load_more">Load 5 more</string>
     <string name="sharing_no_recipients">Nobody to share with yet. Add friends or family in the Friends tab first.</string>
     <string name="sharing_review_none">Not selected</string>
     <string name="sharing_send">Send reminder</string>
