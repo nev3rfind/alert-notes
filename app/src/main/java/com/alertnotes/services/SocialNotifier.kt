@@ -31,8 +31,11 @@ class SocialNotifier @Inject constructor(
         context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
     init {
-        // Superseded by the v2 channel carrying the bundled message sound.
+        // v1 had no custom sound; v2 used a resource-ID URI that breaks on
+        // app updates (ids are build-specific and channels are immutable).
+        // v3 uses the stable NAME-based resource URI.
         manager.deleteNotificationChannel(CHANNEL_CHAT_LEGACY)
+        manager.deleteNotificationChannel(CHANNEL_CHAT_V2)
         manager.createNotificationChannel(
             NotificationChannel(
                 CHANNEL_CHAT,
@@ -42,7 +45,7 @@ class SocialNotifier @Inject constructor(
                 description = context.getString(R.string.channel_chat_description)
                 setSound(
                     android.net.Uri.parse(
-                        "android.resource://${context.packageName}/${R.raw.message_receive}",
+                        "android.resource://${context.packageName}/raw/message_receive",
                     ),
                     android.media.AudioAttributes.Builder()
                         .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION)
@@ -115,7 +118,8 @@ class SocialNotifier @Inject constructor(
         const val TYPE_SYNC = "sync"
 
         private const val CHANNEL_CHAT_LEGACY = "social_chat"
-        private const val CHANNEL_CHAT = "social_chat_v2"
+        private const val CHANNEL_CHAT_V2 = "social_chat_v2"
+        private const val CHANNEL_CHAT = "social_chat_v3"
         private const val CHANNEL_SOCIAL = "social_relationships"
         private const val CHANNEL_SHARING = "social_sharing"
         private const val SOCIAL_NOTIFICATION_ID = 41_000

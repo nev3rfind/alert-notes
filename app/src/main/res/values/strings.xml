@@ -138,6 +138,21 @@
     <string name="ack_photo">Camera proof</string>
     <string name="alert_photo_capture">Take photo to acknowledge</string>
     <string name="alert_photo_hint">A live photo is required — the camera opens, no gallery</string>
+    <string name="ack_location">Location proof</string>
+    <string name="alert_location_capture">Share location to acknowledge</string>
+    <string name="alert_location_hint">Your current location is captured as proof</string>
+    <string name="proof_photo_title">Photo proof</string>
+    <string name="proof_photo_preview_cd">Captured proof photo preview</string>
+    <string name="proof_confirm">Confirm and acknowledge</string>
+    <string name="proof_retake">Retake</string>
+    <string name="proof_retry">Try again</string>
+    <string name="proof_location_title">Location proof</string>
+    <string name="proof_location_acquiring">Getting your precise location…</string>
+    <string name="proof_location_permission_denied">Location permission is required for this proof. Allow it and try again — the sender needs your position to complete this acknowledgement.</string>
+    <string name="proof_location_disabled">Location is turned off on this device. Enable GPS in quick settings, then try again.</string>
+    <string name="proof_location_unavailable">Couldn\'t get a location fix. Move somewhere with a clearer view of the sky and try again.</string>
+    <string name="sharing_ack_location">Location</string>
+    <string name="sharing_open_maps">Open in Google Maps</string>
     <string name="chat_system_assigned_mine">You assigned a reminder</string>
     <string name="chat_system_assigned_theirs">This reminder was assigned to you</string>
 

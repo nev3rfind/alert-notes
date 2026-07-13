@@ -13,6 +13,9 @@ enum class AcknowledgeMethod {
 
     /** Live camera proof captured at dismissal. */
     PHOTO,
+
+    /** High-accuracy location proof captured at dismissal. */
+    LOCATION,
     AUTO,
     NOTIFICATION,
     SNOOZE,

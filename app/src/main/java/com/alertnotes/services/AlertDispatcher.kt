@@ -47,6 +47,7 @@ class AlertDispatcher @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val presenter: AlertPresenter,
     private val notifier: ReminderNotifier,
+    private val soundPlayer: AlertSoundPlayer,
     private val overlayEngine: AlertOverlayEngine,
     @param:ApplicationScope private val scope: CoroutineScope,
     private val logger: AppLogger,
@@ -89,17 +90,46 @@ class AlertDispatcher @Inject constructor(
                 presenter.activeAlert,
                 isAppForeground,
                 isScreenUsable,
-            ) { alert, foreground, screenUsable ->
-                Triple(alert, foreground, screenUsable)
-            }.collect { (alert, foreground, screenUsable) ->
-                route(alert, foreground, screenUsable)
+                AcknowledgementSession.phase,
+            ) { alert, foreground, screenUsable, ackPhase ->
+                RoutingInputs(alert, foreground, screenUsable, ackPhase)
+            }.collect { inputs ->
+                route(inputs.alert, inputs.foreground, inputs.screenUsable, inputs.ackPhase)
             }
         }
         logger.d(TAG, "Alert dispatcher started")
     }
 
-    private fun route(alert: ActiveAlert?, foreground: Boolean, screenUsable: Boolean) {
+    private data class RoutingInputs(
+        val alert: ActiveAlert?,
+        val foreground: Boolean,
+        val screenUsable: Boolean,
+        val ackPhase: AcknowledgementSession.Phase,
+    )
+
+    private fun route(
+        alert: ActiveAlert?,
+        foreground: Boolean,
+        screenUsable: Boolean,
+        ackPhase: AcknowledgementSession.Phase,
+    ) {
+        // The single audio authority: sound starts with the alert on EVERY
+        // surface and stops the moment it is resolved — or while the user is
+        // mid proof-capture.
+        if (alert != null && ackPhase == AcknowledgementSession.Phase.IDLE) {
+            soundPlayer.play(alert)
+        } else {
+            soundPlayer.stop()
+        }
         when {
+            // Proof capture in progress: the camera (or the location sheet)
+            // owns the screen. Re-fronting the alert here was the camera
+            // bounce — stand down until the session resolves.
+            alert != null && ackPhase != AcknowledgementSession.Phase.IDLE -> {
+                overlayEngine.hide()
+                notifier.cancel()
+            }
+
             alert == null || foreground -> {
                 overlayEngine.hide()
                 notifier.cancel()

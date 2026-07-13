@@ -2,8 +2,6 @@ package com.alertnotes.features.alerts
 
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
@@ -74,7 +72,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import com.alertnotes.core.util.AckProofStore
+import com.alertnotes.services.AcknowledgementSession
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -642,13 +640,29 @@ private fun AlertActions(
             }
 
             AcknowledgementType.PHOTO -> {
-                PhotoProofButton(
+                ProofCaptureButton(
                     reminderId = reminder.id,
+                    method = AcknowledgeMethod.PHOTO,
+                    mode = com.alertnotes.ProofCaptureActivity.MODE_PHOTO,
+                    label = stringResource(R.string.alert_photo_capture),
                     spec = spec,
                     compact = compact,
-                    onCaptured = { onDismiss(AcknowledgeMethod.PHOTO, null) },
+                    onDismiss = onDismiss,
                 )
                 GestureHint(text = stringResource(R.string.alert_photo_hint), spec = spec)
+            }
+
+            AcknowledgementType.LOCATION -> {
+                ProofCaptureButton(
+                    reminderId = reminder.id,
+                    method = AcknowledgeMethod.LOCATION,
+                    mode = com.alertnotes.ProofCaptureActivity.MODE_LOCATION,
+                    label = stringResource(R.string.alert_location_capture),
+                    spec = spec,
+                    compact = compact,
+                    onDismiss = onDismiss,
+                )
+                GestureHint(text = stringResource(R.string.alert_location_hint), spec = spec)
             }
 
             AcknowledgementType.SWIPE -> {
@@ -724,34 +738,46 @@ private fun BoxScope.CriticalBadge(priority: ReminderPriority) {
 }
 
 /**
- * Camera-proof acknowledgement: launches the device camera with a
- * FileProvider target inside app-private storage. The TakePicture contract
- * is capture-only by design — there is no gallery path — and the alert is
- * dismissed ONLY after a successful live capture lands in the proof store,
- * where the sharing sweep picks it up for upload.
+ * Proof-capture acknowledgement (camera or location). The capture runs in
+ * [com.alertnotes.ProofCaptureActivity] — a NORMAL-launchMode task, because
+ * this singleInstance alert activity cannot receive cross-task results —
+ * and the outcome returns through [AcknowledgementSession], which also
+ * makes the dispatcher stand down so the alert cannot re-front itself over
+ * the camera. The alert is dismissed ONLY after the user confirms the
+ * proof; cancelling returns to the alert exactly as it was.
  */
 @Composable
-private fun PhotoProofButton(
+private fun ProofCaptureButton(
     reminderId: Long,
+    method: AcknowledgeMethod,
+    mode: String,
+    label: String,
     spec: ReminderThemeSpec,
     compact: Boolean,
-    onCaptured: () -> Unit,
+    onDismiss: (AcknowledgeMethod, ReminderDrawing?) -> Unit,
 ) {
     val context = LocalContext.current
-    val captureUri = remember(reminderId) {
-        AckProofStore.captureUriFor(context, reminderId)
-    }
-    val launcher = rememberLauncherForActivityResult(
-        ActivityResultContracts.TakePicture(),
-    ) { success ->
-        if (success) onCaptured()
+    LaunchedEffect(reminderId, method) {
+        AcknowledgementSession.results.collect { result ->
+            if (result.reminderId == reminderId && result.confirmed && result.method == method) {
+                onDismiss(method, null)
+            }
+        }
     }
     AlertPillButton(
-        label = stringResource(R.string.alert_photo_capture),
+        label = label,
         enabled = true,
         spec = spec,
         compact = compact,
-        onClick = { launcher.launch(captureUri) },
+        onClick = {
+            // One workflow at a time: a second tap (or a second method)
+            // while a capture is running is ignored.
+            if (AcknowledgementSession.begin(reminderId)) {
+                context.startActivity(
+                    com.alertnotes.ProofCaptureActivity.intent(context, reminderId, mode),
+                )
+            }
+        },
     )
 }
 

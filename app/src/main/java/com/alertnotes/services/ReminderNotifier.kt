@@ -4,7 +4,6 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
-import android.media.AudioAttributes
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.alertnotes.AlertActivity
@@ -36,15 +35,15 @@ class ReminderNotifier @Inject constructor(
 
     fun ensureChannels() {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
-        // The legacy single-sound channel is superseded by the per-priority
-        // channels below; removing it keeps system settings tidy.
+        // Superseded channel generations. v1 carried the system alarm tone;
+        // v2 carried bundled sounds via resource-ID URIs — which do not
+        // survive app updates (ids are build-specific) and cannot be fixed
+        // in place because channel settings are immutable once created.
+        // Audio now lives in AlertSoundPlayer (started by the dispatcher on
+        // every surface), so the v3 channels are deliberately silent.
         manager.deleteNotificationChannel(CHANNEL_ALERTS_LEGACY)
-        val alarmAttributes = AudioAttributes.Builder()
-            // Alarm stream: reminders must ring like alarms (and respect the
-            // alarm volume), not like chat pings.
-            .setUsage(AudioAttributes.USAGE_ALARM)
-            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-            .build()
+        manager.deleteNotificationChannel(CHANNEL_ALERTS_V2)
+        manager.deleteNotificationChannel(CHANNEL_CRITICAL_V2)
         manager.createNotificationChannel(
             NotificationChannel(
                 CHANNEL_ALERTS,
@@ -53,8 +52,7 @@ class ReminderNotifier @Inject constructor(
             ).apply {
                 description = context.getString(R.string.notification_channel_alerts_description)
                 enableVibration(true)
-                // The bundled Alert Notes signature sound.
-                setSound(rawSoundUri(R.raw.sound_noti), alarmAttributes)
+                setSound(null, null)
             },
         )
         manager.createNotificationChannel(
@@ -65,8 +63,7 @@ class ReminderNotifier @Inject constructor(
             ).apply {
                 description = context.getString(R.string.notification_channel_critical_description)
                 enableVibration(true)
-                // Critical reminders always carry the dedicated alarm sound.
-                setSound(rawSoundUri(R.raw.alert_critical), alarmAttributes)
+                setSound(null, null)
             },
         )
         manager.createNotificationChannel(
@@ -81,9 +78,6 @@ class ReminderNotifier @Inject constructor(
             },
         )
     }
-
-    private fun rawSoundUri(resId: Int): android.net.Uri =
-        android.net.Uri.parse("android.resource://${context.packageName}/$resId")
 
     /** Returns true when the notification was actually handed to the system. */
     fun showAlert(alert: ActiveAlert): Boolean {
@@ -201,8 +195,10 @@ class ReminderNotifier @Inject constructor(
     private companion object {
         const val TAG = "ReminderNotifier"
         const val CHANNEL_ALERTS_LEGACY = "reminder_alerts"
-        const val CHANNEL_ALERTS = "reminder_alerts_noti"
-        const val CHANNEL_CRITICAL = "reminder_alerts_critical"
+        const val CHANNEL_ALERTS_V2 = "reminder_alerts_noti"
+        const val CHANNEL_CRITICAL_V2 = "reminder_alerts_critical"
+        const val CHANNEL_ALERTS = "reminder_alerts_v3"
+        const val CHANNEL_CRITICAL = "reminder_alerts_critical_v3"
         const val CHANNEL_SILENT = "reminder_alerts_silent"
         const val NOTIFICATION_ID = 1001
         const val REQUEST_OPEN = 10

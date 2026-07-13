@@ -38,6 +38,9 @@ enum class AcknowledgementType {
 
     /** A live camera capture is the proof; gallery uploads are impossible. */
     PHOTO,
+
+    /** A high-accuracy location fix is the proof. */
+    LOCATION,
 }
 
 /**

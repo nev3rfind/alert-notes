@@ -95,6 +95,11 @@ data class ReminderShare(
     val ackSignature: String = "",
     /** Storage URL of the live camera proof when the method was PHOTO. */
     val ackPhotoUrl: String = "",
+    /** Location proof when the method was LOCATION. */
+    val ackLat: Double? = null,
+    val ackLng: Double? = null,
+    val ackAccuracyM: Double? = null,
+    val ackAddress: String = "",
     val createdAt: Instant?,
     val respondedAt: Instant?,
     val scheduledAt: Instant?,

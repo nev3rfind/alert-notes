@@ -410,17 +410,29 @@ class ReminderSharingRepositoryImpl @Inject constructor(
             // mirror untouched so the next sweep retries with the photo.
             return
         }
-        shareReference(share.id).set(
-            mapOf(
-                "ackMethod" to method.name,
-                "ackAtMillis" to dismissedAt.toEpochMilli(),
-                "ackDelaySeconds" to delaySeconds,
-                "ackSignature" to (entry.signature?.toJson().orEmpty()),
-                "ackPhotoUrl" to photoUrl,
-                "lastSyncAt" to FieldValue.serverTimestamp(),
-            ),
-            SetOptions.merge(),
-        ).await()
+        val fields = mutableMapOf<String, Any?>(
+            "ackMethod" to method.name,
+            "ackAtMillis" to dismissedAt.toEpochMilli(),
+            "ackDelaySeconds" to delaySeconds,
+            "ackSignature" to (entry.signature?.toJson().orEmpty()),
+            "ackPhotoUrl" to photoUrl,
+            "lastSyncAt" to FieldValue.serverTimestamp(),
+        )
+        if (method == com.alertnotes.domain.model.AcknowledgeMethod.LOCATION) {
+            com.alertnotes.core.util.AckProofStore.consumeLocationProof(context, localId)
+                ?.let { proof ->
+                    fields["ackLat"] = proof.latitude
+                    fields["ackLng"] = proof.longitude
+                    fields["ackAccuracyM"] = proof.accuracyMeters
+                    fields["ackAddress"] = listOf(
+                        proof.address,
+                        proof.city,
+                        proof.region,
+                        proof.country,
+                    ).filter { it.isNotBlank() }.joinToString(", ")
+                }
+        }
+        shareReference(share.id).set(fields, SetOptions.merge()).await()
         notificationCentre.publish(
             recipientUid = share.ownerUid,
             category = com.alertnotes.domain.model.NotificationCategory.REMINDER_ACKNOWLEDGED,
@@ -688,6 +700,10 @@ class ReminderSharingRepositoryImpl @Inject constructor(
             ackDelaySeconds = getLong("ackDelaySeconds"),
             ackSignature = getString("ackSignature").orEmpty(),
             ackPhotoUrl = getString("ackPhotoUrl").orEmpty(),
+            ackLat = getDouble("ackLat"),
+            ackLng = getDouble("ackLng"),
+            ackAccuracyM = getDouble("ackAccuracyM"),
+            ackAddress = getString("ackAddress").orEmpty(),
             createdAt = instantField("createdAt"),
             respondedAt = instantField("respondedAt"),
             scheduledAt = instantField("scheduledAt"),

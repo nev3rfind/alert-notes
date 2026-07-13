@@ -25,6 +25,9 @@
     <!-- Online mode only: Firebase Auth + Firestore. Offline mode never
          opens a connection. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Location-proof acknowledgements only; requested at capture time. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
     <!-- allowBackup=false: reminder data leaves the device only through the
          user's explicit choices — the local ZIP export, or opt-in online
@@ -70,6 +73,17 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Proof capture (camera / location) in a NORMAL-launchMode task:
+             singleInstance AlertActivity cannot receive cross-task results,
+             so proofs resolve through AcknowledgementSession instead. -->
+        <activity
+            android:name=".ProofCaptureActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:theme="@style/Theme.AlertNotes" />
 
         <!-- Full-screen alert window: over the lock screen, wakes the display. -->
         <activity

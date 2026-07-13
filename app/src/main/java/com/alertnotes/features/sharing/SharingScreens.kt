@@ -756,6 +756,14 @@ private fun OutgoingShareCard(
             if (share.ackPhotoUrl.isNotBlank()) {
                 PhotoProofPreview(url = share.ackPhotoUrl)
             }
+            if (share.ackLat != null && share.ackLng != null) {
+                LocationProofDetails(
+                    latitude = share.ackLat,
+                    longitude = share.ackLng,
+                    accuracyMeters = share.ackAccuracyM,
+                    address = share.ackAddress,
+                )
+            }
         }
         if (share.updateRequested && share.hasPendingUpdate) {
             Text(
@@ -878,6 +886,43 @@ private fun PhotoProofPreview(url: String) {
 }
 
 private const val PHOTO_PREVIEW_ASPECT = 4f / 3f
+
+/** Location proof: coordinates, address, accuracy, and a jump to Maps. */
+@Composable
+private fun LocationProofDetails(
+    latitude: Double,
+    longitude: Double,
+    accuracyMeters: Double?,
+    address: String,
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    ReviewLine(
+        label = stringResource(R.string.sharing_ack_location),
+        value = "%.5f, %.5f".format(latitude, longitude) +
+            (accuracyMeters?.let { "  ±%.0f m".format(it) } ?: ""),
+    )
+    if (address.isNotBlank()) {
+        Text(
+            text = address,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+    TextButton(
+        onClick = {
+            runCatching {
+                context.startActivity(
+                    android.content.Intent(
+                        android.content.Intent.ACTION_VIEW,
+                        android.net.Uri.parse("geo:$latitude,$longitude?q=$latitude,$longitude"),
+                    ),
+                )
+            }
+        },
+    ) {
+        Text(text = stringResource(R.string.sharing_open_maps))
+    }
+}
 
 /** Human response delay: seconds under a minute, then minutes, then hours. */
 private fun formatResponseDelay(seconds: Long): String = when {
