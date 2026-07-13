@@ -127,8 +127,11 @@ class ProofCaptureActivity : FragmentActivity() {
     override fun onResume() {
         super.onResume()
         // Returning from the system Location Settings screen: continue
-        // automatically the moment services are enabled.
-        locationViewModel.onResumed()
+        // automatically the moment services are enabled. Gated by mode —
+        // photo sessions must never lazily spin up location acquisition.
+        if (intent.getStringExtra(EXTRA_MODE) == MODE_LOCATION) {
+            locationViewModel.onResumed()
+        }
     }
 
     override fun onDestroy() {

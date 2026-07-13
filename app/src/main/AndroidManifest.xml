@@ -81,7 +81,9 @@
             android:name=".ProofCaptureActivity"
             android:exported="false"
             android:excludeFromRecents="true"
+            android:launchMode="singleTop"
             android:showWhenLocked="true"
+            android:taskAffinity=""
             android:turnScreenOn="true"
             android:theme="@style/Theme.AlertNotes" />
 

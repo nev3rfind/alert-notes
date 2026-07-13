@@ -114,7 +114,14 @@ import kotlinx.coroutines.launch
 fun ReminderAlertHost(
     viewModel: AlertPresenterViewModel = hiltViewModel(),
 ) {
-    val alert by viewModel.activeAlert.collectAsStateWithLifecycle()
+    val presentedAlert by viewModel.activeAlert.collectAsStateWithLifecycle()
+    val ackPhase by AcknowledgementSession.phase.collectAsStateWithLifecycle()
+    // While a proof capture runs, the reminder is SUSPENDED — no surface may
+    // render it. This host lives in MainActivity, AlertActivity, and the
+    // overlay alike; gating only the dispatcher was not enough, because the
+    // location screen sits in the app's own task with these hosts alive
+    // beneath it — the alert UI "took over" from here, not from a re-launch.
+    val alert = if (ackPhase == AcknowledgementSession.Phase.IDLE) presentedAlert else null
     val activity = LocalActivity.current
     val biometricTitle = stringResource(R.string.biometric_prompt_title)
     val cancelLabel = stringResource(R.string.action_cancel)
