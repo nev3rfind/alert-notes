@@ -452,6 +452,15 @@ class ReminderSharingRepositoryImpl @Inject constructor(
             refId = share.id,
             dedupeKey = "share_${share.id}_ack",
         )
+        // Chat is the communication history: the acknowledgement lands as a
+        // system event with the live reminder card beneath it.
+        narrate(
+            share.ownerUid,
+            SystemMessageKind.REMINDER_ACKNOWLEDGED,
+            shareId = share.id,
+            shareTitle = share.title,
+            shareSchedule = share.scheduleSummary,
+        )
         logger.i(TAG, "Acknowledgement mirrored for ${share.id} (${method.name})")
     }
 

@@ -16,6 +16,9 @@ enum class SystemMessageKind {
     REMINDER_ASSIGNED,
     REMINDER_ACCEPTED,
     REMINDER_REJECTED,
+
+    /** The recipient acknowledged the fired reminder (proof may attach). */
+    REMINDER_ACKNOWLEDGED,
     NONE,
 }
 

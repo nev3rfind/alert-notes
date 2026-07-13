@@ -177,6 +177,8 @@
     <string name="sharing_open_maps">Open in Google Maps</string>
     <string name="chat_system_assigned_mine">You assigned a reminder</string>
     <string name="chat_system_assigned_theirs">This reminder was assigned to you</string>
+    <string name="chat_system_acknowledged_mine">You acknowledged this reminder</string>
+    <string name="chat_system_acknowledged_theirs">Reminder acknowledged</string>
 
     <!-- More hub -->
     <string name="more_section_app">App</string>

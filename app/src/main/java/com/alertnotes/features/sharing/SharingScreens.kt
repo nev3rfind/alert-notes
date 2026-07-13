@@ -9,7 +9,10 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
@@ -41,6 +44,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.alertnotes.data.entities.toReminderDrawingOrNull
+import com.alertnotes.domain.model.timeline
 import com.alertnotes.features.drawing.drawReminderStrokes
 import com.alertnotes.features.history.labelRes
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -815,45 +819,7 @@ private fun OutgoingShareCard(
                 color = MaterialTheme.colorScheme.tertiary,
             )
         }
-        val timeline = buildList {
-            share.createdAt?.let {
-                add(
-                    stringResource(R.string.sharing_time_created) +
-                        " " + it.toDisplayDateTime(ZoneId.systemDefault()),
-                )
-            }
-            share.respondedAt?.let {
-                add(
-                    stringResource(R.string.sharing_time_responded) +
-                        " " + it.toDisplayDateTime(ZoneId.systemDefault()),
-                )
-            }
-            share.scheduledAt?.let {
-                add(
-                    stringResource(R.string.sharing_time_scheduled) +
-                        " " + it.toDisplayDateTime(ZoneId.systemDefault()),
-                )
-            }
-            share.lastFiredAt?.let {
-                add(
-                    stringResource(R.string.sharing_time_fired) +
-                        " " + it.toDisplayDateTime(ZoneId.systemDefault()),
-                )
-            }
-            share.ackAt?.let {
-                add(
-                    stringResource(R.string.sharing_ack_label) +
-                        " " + it.toDisplayDateTime(ZoneId.systemDefault()),
-                )
-            }
-        }
-        if (timeline.isNotEmpty()) {
-            Text(
-                text = timeline.joinToString(" · "),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+        ShareTimelineColumn(share = share)
         Row {
             if (share.status == ShareStatus.PENDING || share.status == ShareStatus.DELIVERED) {
                 TextButton(onClick = onCancel) {
@@ -929,6 +895,105 @@ private fun PhotoProofPreview(url: String) {
 }
 
 private const val PHOTO_PREVIEW_ASPECT = 4f / 3f
+
+/**
+ * THE timeline renderer: a vertical audit trail derived from the share
+ * document by [com.alertnotes.domain.model.timeline] — the one derivation
+ * every surface shares, so tracking, details, and chat can never disagree.
+ */
+@Composable
+internal fun ShareTimelineColumn(share: com.alertnotes.domain.model.ReminderShare) {
+    val events = share.timeline()
+    if (events.isEmpty()) return
+    val zone = ZoneId.systemDefault()
+    Column(modifier = Modifier.padding(vertical = MaterialTheme.spacing.extraSmall)) {
+        events.forEachIndexed { index, event ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        imageVector = event.type.icon(),
+                        contentDescription = null,
+                        tint = event.type.tint(),
+                        modifier = Modifier
+                            .padding(2.dp)
+                            .size(16.dp),
+                    )
+                    if (index != events.lastIndex) {
+                        Box(
+                            modifier = Modifier
+                                .padding(vertical = 1.dp)
+                                .width(2.dp)
+                                .height(10.dp)
+                                .background(MaterialTheme.colorScheme.outlineVariant),
+                        )
+                    }
+                }
+                val delaySuffix = if (
+                    event.type == com.alertnotes.domain.model.ShareTimelineEventType.ACKNOWLEDGED &&
+                    share.ackDelaySeconds != null
+                ) {
+                    " · " + formatResponseDelay(share.ackDelaySeconds)
+                } else {
+                    ""
+                }
+                Text(
+                    text = stringResource(event.type.labelRes()) + delaySuffix,
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(start = MaterialTheme.spacing.small),
+                )
+                Text(
+                    text = event.at.toDisplayDateTime(zone),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+private fun com.alertnotes.domain.model.ShareTimelineEventType.labelRes(): Int = when (this) {
+    com.alertnotes.domain.model.ShareTimelineEventType.CREATED -> R.string.sharing_time_created
+    com.alertnotes.domain.model.ShareTimelineEventType.ACCEPTED -> R.string.sharing_status_accepted
+    com.alertnotes.domain.model.ShareTimelineEventType.REJECTED -> R.string.sharing_status_rejected
+    com.alertnotes.domain.model.ShareTimelineEventType.SCHEDULED -> R.string.sharing_time_scheduled
+    com.alertnotes.domain.model.ShareTimelineEventType.UPDATED -> R.string.sharing_update_incoming_title
+    com.alertnotes.domain.model.ShareTimelineEventType.TRIGGERED -> R.string.sharing_time_fired
+    com.alertnotes.domain.model.ShareTimelineEventType.ACKNOWLEDGED -> R.string.sharing_ack_label
+    com.alertnotes.domain.model.ShareTimelineEventType.COMPLETED -> R.string.sharing_status_completed
+    com.alertnotes.domain.model.ShareTimelineEventType.CANCELLED -> R.string.sharing_status_cancelled
+}
+
+@Composable
+private fun com.alertnotes.domain.model.ShareTimelineEventType.icon():
+    androidx.compose.ui.graphics.vector.ImageVector = when (this) {
+    com.alertnotes.domain.model.ShareTimelineEventType.CREATED -> Icons.Outlined.Info
+    com.alertnotes.domain.model.ShareTimelineEventType.ACCEPTED,
+    com.alertnotes.domain.model.ShareTimelineEventType.ACKNOWLEDGED,
+    com.alertnotes.domain.model.ShareTimelineEventType.COMPLETED,
+    -> Icons.Outlined.CheckCircle
+
+    com.alertnotes.domain.model.ShareTimelineEventType.REJECTED,
+    com.alertnotes.domain.model.ShareTimelineEventType.CANCELLED,
+    -> Icons.Outlined.RadioButtonUnchecked
+
+    else -> Icons.Outlined.Info
+}
+
+@Composable
+private fun com.alertnotes.domain.model.ShareTimelineEventType.tint():
+    androidx.compose.ui.graphics.Color = when (this) {
+    com.alertnotes.domain.model.ShareTimelineEventType.REJECTED,
+    com.alertnotes.domain.model.ShareTimelineEventType.CANCELLED,
+    -> MaterialTheme.colorScheme.error
+
+    com.alertnotes.domain.model.ShareTimelineEventType.ACKNOWLEDGED,
+    com.alertnotes.domain.model.ShareTimelineEventType.COMPLETED,
+    -> MaterialTheme.colorScheme.primary
+
+    else -> MaterialTheme.colorScheme.onSurfaceVariant
+}
 
 /** Location proof: mini map, coordinates, address, and a jump to Maps. */
 @Composable
@@ -1023,11 +1088,11 @@ private fun openInMaps(context: android.content.Context, latitude: Double, longi
 
 private const val MAP_PREVIEW_ASPECT = 2.4f
 
-/** Human response delay: seconds under a minute, then minutes, then hours. */
+/** Human response delay: "37s", "4m 18s", "1h 12m". */
 private fun formatResponseDelay(seconds: Long): String = when {
     seconds < 60 -> "${seconds}s"
-    seconds < 3_600 -> "${seconds / 60} min"
-    else -> "${seconds / 3_600}h ${(seconds % 3_600) / 60} min"
+    seconds < 3_600 -> "${seconds / 60}m ${seconds % 60}s"
+    else -> "${seconds / 3_600}h ${(seconds % 3_600) / 60}m"
 }
 
 private const val SIGNATURE_PREVIEW_ASPECT = 3f
