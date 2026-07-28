@@ -62,6 +62,8 @@ import com.alertnotes.core.ui.components.SkeletonCircle
 import com.alertnotes.core.ui.components.SkeletonLine
 import com.alertnotes.core.ui.theme.spacing
 import com.alertnotes.domain.model.AppNotification
+import com.alertnotes.domain.model.FriendError
+import com.alertnotes.domain.model.FriendException
 import com.alertnotes.domain.model.NotificationCategory
 import com.alertnotes.domain.repository.AuthRepository
 import com.alertnotes.domain.repository.FriendRepository
@@ -188,7 +190,11 @@ class NotificationCentreViewModel @Inject constructor(
             NotificationCategory.REMINDER_INVITATION ->
                 sharingRepository.incomingShares.first()
                     .firstOrNull { it.share.id == entry.refId }
+                    // No live share behind the card means it was cancelled,
+                    // already accepted, or delivered elsewhere. Saying so
+                    // beats silently marking the card read.
                     ?.let { sharingRepository.acceptShare(it.share) }
+                    ?: throw FriendException(FriendError.UNKNOWN)
 
             else -> Unit
         }
@@ -212,8 +218,30 @@ class NotificationCentreViewModel @Inject constructor(
         repository.markRead(entry.id)
     }
 
+    /**
+     * A notification-centre entry is a durable record of something that
+     * happened, not a live view of it. By the time it is tapped the request
+     * may have been answered on another device, the share may already be
+     * delivered, or the request may have expired.
+     *
+     * `act` used to swallow every failure, so those taps looked like they
+     * worked: the card was marked read and vanished, while the friendship or
+     * the share was left exactly as it was. Failures are now surfaced.
+     */
+    private val _notice = MutableStateFlow<FriendError?>(null)
+    val notice: StateFlow<FriendError?> = _notice.asStateFlow()
+
+    fun dismissNotice() {
+        _notice.value = null
+    }
+
     private fun act(operation: suspend () -> Unit) {
-        viewModelScope.launch { runCatching { operation() } }
+        viewModelScope.launch {
+            runCatching { operation() }
+                .onFailure { throwable ->
+                    _notice.value = (throwable as? FriendException)?.error ?: FriendError.UNKNOWN
+                }
+        }
     }
 }
 
@@ -261,7 +289,18 @@ fun NotificationCentreScreen(
     val filter by viewModel.filter.collectAsStateWithLifecycle()
     val category by viewModel.category.collectAsStateWithLifecycle()
     val unreadCount by viewModel.unreadCount.collectAsStateWithLifecycle()
+    val notice by viewModel.notice.collectAsStateWithLifecycle()
     val zone = ZoneId.systemDefault()
+
+    // Accept/Decline on a stale card fails for a real reason - already
+    // answered elsewhere, already delivered, expired. Say so instead of
+    // quietly marking the card read as if it had worked.
+    notice?.let { error ->
+        com.alertnotes.features.friends.FriendNoticeDialog(
+            error = error,
+            onDismiss = viewModel::dismissNotice,
+        )
+    }
 
     val openEntry: (AppNotification) -> Unit = { entry ->
         viewModel.markRead(entry.id)

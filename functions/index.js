@@ -60,10 +60,25 @@ async function sendToUser(uid, data) {
   await Promise.all(prunes);
 }
 
+/**
+ * How long a client's "this conversation is on my screen" claim is trusted.
+ *
+ * The claim is cleared when the chat screen stops, but a force-stop or a
+ * low-memory kill never gets to do that - and a stale claim silently
+ * suppressed every push for that conversation, permanently. Expiring it bounds
+ * the damage to one window instead.
+ */
+const ACTIVE_CHAT_TTL_MILLIS = 10 * 60 * 1000;
+
 /** The recipient's realtime UI already shows this conversation? Skip push. */
 async function conversationOnScreen(recipientUid, chatId) {
   const privateDoc = await db.doc(`users/${recipientUid}/private/data`).get();
-  return privateDoc.exists && privateDoc.get("activeChatId") === chatId;
+  if (!privateDoc.exists || privateDoc.get("activeChatId") !== chatId) return false;
+  const since = privateDoc.get("activeSince");
+  // A claim with no timestamp predates this field: treat it as stale rather
+  // than trusting it forever.
+  if (!since || typeof since.toMillis !== "function") return false;
+  return Date.now() - since.toMillis() < ACTIVE_CHAT_TTL_MILLIS;
 }
 
 async function displayNameOf(uid) {

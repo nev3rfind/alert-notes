@@ -161,7 +161,20 @@ class ChatRepositoryImpl @Inject constructor(
                 firestore.collection(FirestoreSchema.USERS).document(me)
                     .collection(FirestoreSchema.SECTION_PRIVATE)
                     .document(FirestoreSchema.SECTION_DOC)
-                    .set(mapOf("activeChatId" to chatId), SetOptions.merge())
+                    // activeSince is what makes this safe against process
+                    // death. ON_STOP clears activeChatId, but a force-stop or
+                    // a low-memory kill never gets to run it, and a stale
+                    // "this chat is on screen" flag suppressed that
+                    // conversation's pushes server-side forever. The Cloud
+                    // Function now ignores the flag once it goes stale, so the
+                    // worst case is bounded by the freshness window.
+                    .set(
+                        mapOf(
+                            "activeChatId" to chatId,
+                            "activeSince" to FieldValue.serverTimestamp(),
+                        ),
+                        SetOptions.merge(),
+                    )
                     .await()
             }.onFailure { logger.d(TAG, "Active-conversation mirror failed: ${it.message}") }
         }

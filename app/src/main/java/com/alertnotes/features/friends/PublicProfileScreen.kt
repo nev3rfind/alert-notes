@@ -21,6 +21,11 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Block
+import androidx.compose.material.icons.outlined.LockOpen
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -171,6 +176,21 @@ class PublicProfileViewModel @Inject constructor(
 
     fun removeFamilyMember() = act { friendRepository.removeFamilyMember(uid) }
 
+    /**
+     * Whether the signed-in user has blocked this account.
+     *
+     * Blocking was only reachable from the friends list, so the one place a
+     * user actually meets a stranger - their profile, reached from search or
+     * from a request - offered no way to stop them.
+     */
+    val isBlocked: StateFlow<Boolean> = friendRepository.blockedUsers
+        .map { blocked -> blocked.any { it.uid == uid } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    fun block() = act { friendRepository.blockUser(uid) }
+
+    fun unblock() = act { friendRepository.unblockUser(uid) }
+
     fun dismissNotice() {
         _notice.value = null
     }
@@ -209,12 +229,62 @@ fun PublicProfileScreen(
     val familyState by viewModel.familyState.collectAsStateWithLifecycle()
     val statistics by viewModel.statistics.collectAsStateWithLifecycle()
     val notice by viewModel.notice.collectAsStateWithLifecycle()
+    val isBlocked by viewModel.isBlocked.collectAsStateWithLifecycle()
+    var confirmBlock by rememberSaveable { mutableStateOf(false) }
+
+    if (confirmBlock) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { confirmBlock = false },
+            shape = MaterialTheme.shapes.extraLarge,
+            title = { Text(text = stringResource(R.string.friends_block_confirm_title_generic)) },
+            text = { Text(text = stringResource(R.string.friends_block_confirm_message)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.block()
+                        confirmBlock = false
+                    },
+                ) {
+                    Text(
+                        text = stringResource(R.string.friends_block),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmBlock = false }) {
+                    Text(text = stringResource(R.string.action_cancel))
+                }
+            },
+        )
+    }
 
     Scaffold(
         topBar = {
             AppTopBar(
                 title = stringResource(R.string.friends_public_profile_title),
                 onNavigateBack = onNavigateBack,
+                actions = {
+                    if (friendState != FriendshipState.SELF) {
+                        IconButton(
+                            onClick = {
+                                if (isBlocked) viewModel.unblock() else confirmBlock = true
+                            },
+                        ) {
+                            Icon(
+                                imageVector = if (isBlocked) {
+                                    Icons.Outlined.LockOpen
+                                } else {
+                                    Icons.Outlined.Block
+                                },
+                                contentDescription = stringResource(
+                                    if (isBlocked) R.string.friends_unblock else R.string.friends_block,
+                                ),
+                                tint = MaterialTheme.colorScheme.error,
+                            )
+                        }
+                    }
+                },
             )
         },
         containerColor = MaterialTheme.colorScheme.background,

@@ -42,6 +42,7 @@
     <string name="friends_block">Block</string>
     <string name="friends_unblock">Unblock</string>
     <string name="friends_block_confirm_title">Block %1$s?</string>
+    <string name="friends_block_confirm_title_generic">Block this person?</string>
     <string name="friends_block_confirm_message">They\'ll be removed from your friends and family, can\'t message you, send reminders or invitations, and won\'t find you in search. Reminders you already received stay in your history.</string>
     <string name="friends_blocked_empty">Nobody is blocked.</string>
 

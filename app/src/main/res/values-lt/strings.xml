@@ -1092,4 +1092,5 @@
     <string name="settings_language_system">Sistemos numatytoji</string>
     <string name="settings_language_english">English</string>
     <string name="settings_language_lithuanian">Lietuvių</string>
+    <string name="friends_block_confirm_title_generic">Blokuoti šį asmenį?</string>
 </resources>

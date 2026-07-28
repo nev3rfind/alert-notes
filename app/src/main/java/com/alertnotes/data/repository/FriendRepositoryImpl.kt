@@ -250,13 +250,38 @@ class FriendRepositoryImpl @Inject constructor(
     override suspend fun cancelRequest(requestId: String) =
         closeRequest(requestId, FriendRequestStatus.CANCELLED, mustBeField = "fromUid")
 
+    /**
+     * Ends a friendship, and with it any family membership built on top of it.
+     *
+     * Two invariants are enforced here rather than left to callers:
+     *
+     * 1. **Counters only move when an edge actually existed.** The decrement
+     *    used to be unconditional, so removing a friendship that had already
+     *    been ended from the other device drove both accounts' friendCount
+     *    negative — and those counters are public.
+     * 2. **Family cannot outlive friendship.** Family is invitation-gated on an
+     *    existing friendship, so an ex-friend who kept their family edge would
+     *    retain every family permission (including auto-delivered reminders)
+     *    with no way to see or revoke it.
+     */
     override suspend fun removeFriend(friendUid: String) = runFriendOp {
         val me = requireUid()
+        val hadFriendEdge = friendEdge(me, friendUid).get().await().exists()
+        val hadFamilyEdge = familyEdge(me, friendUid).get().await().exists()
+        if (!hadFriendEdge && !hadFamilyEdge) return@runFriendOp
         firestore.runBatch { batch ->
-            batch.delete(friendEdge(me, friendUid))
-            batch.delete(friendEdge(friendUid, me))
-            batch.set(statisticsDocument(me), FRIEND_COUNT_DOWN, SetOptions.merge())
-            batch.set(statisticsDocument(friendUid), FRIEND_COUNT_DOWN, SetOptions.merge())
+            if (hadFriendEdge) {
+                batch.delete(friendEdge(me, friendUid))
+                batch.delete(friendEdge(friendUid, me))
+                batch.set(statisticsDocument(me), FRIEND_COUNT_DOWN, SetOptions.merge())
+                batch.set(statisticsDocument(friendUid), FRIEND_COUNT_DOWN, SetOptions.merge())
+            }
+            if (hadFamilyEdge) {
+                batch.delete(familyEdge(me, friendUid))
+                batch.delete(familyEdge(friendUid, me))
+                batch.set(statisticsDocument(me), FAMILY_COUNT_DOWN, SetOptions.merge())
+                batch.set(statisticsDocument(friendUid), FAMILY_COUNT_DOWN, SetOptions.merge())
+            }
         }.await()
         Unit
     }
@@ -301,9 +326,12 @@ class FriendRepositoryImpl @Inject constructor(
 
     override suspend fun publicStatistics(uid: String): PublicStatistics = runCatching {
         val doc = statisticsDocument(uid).get().await()
+        // Clamped on read as well as guarded on write: these counters are
+        // increments spread across two accounts, so a historically corrupted
+        // value must never render as "-2 friends" on a public profile.
         PublicStatistics(
-            friendCount = doc.getLong("friendCount")?.toInt() ?: 0,
-            familyCount = doc.getLong("familyCount")?.toInt() ?: 0,
+            friendCount = (doc.getLong("friendCount") ?: 0L).toInt().coerceAtLeast(0),
+            familyCount = (doc.getLong("familyCount") ?: 0L).toInt().coerceAtLeast(0),
         )
     }.getOrDefault(PublicStatistics())
 
@@ -385,6 +413,10 @@ class FriendRepositoryImpl @Inject constructor(
 
     override suspend fun removeFamilyMember(memberUid: String) = runFriendOp {
         val me = requireUid()
+        // Same rule as removeFriend: no edge, no decrement. Leaving a family
+        // that another device already left used to subtract from both
+        // accounts' public familyCount a second time.
+        if (!familyEdge(me, memberUid).get().await().exists()) return@runFriendOp
         firestore.runBatch { batch ->
             batch.delete(familyEdge(me, memberUid))
             batch.delete(familyEdge(memberUid, me))
@@ -417,13 +449,57 @@ class FriendRepositoryImpl @Inject constructor(
         val me = requireUid()
         if (uid == me) throw FriendException(FriendError.SELF_REQUEST)
         // Sever the relationships first — best-effort so the block itself
-        // always lands even if an edge is already gone.
-        runCatching { removeFamilyMember(uid) }
+        // always lands even if an edge is already gone. removeFriend now
+        // tears down the family edge too and each side checks the edge exists
+        // before touching a counter, so calling it here is safe.
         runCatching { removeFriend(uid) }
+        // A pending request in either direction must not survive the block:
+        // left PENDING it stays in the other party's inbox, and accepting it
+        // would rebuild the friendship the block just removed.
+        runCatching { closePendingRequestsWith(uid) }
+            .onFailure { logger.w(TAG, "Could not close pending requests on block", it) }
         blockedDocument(me, uid).set(
             mapOf("uid" to uid, "since" to FieldValue.serverTimestamp()),
         ).await()
         logger.i(TAG, "User blocked")
+    }
+
+    /**
+     * Cancels any pending friend request or family invitation between the
+     * signed-in user and [uid], in both directions.
+     *
+     * Only the side the security rules permit is written: the sender may
+     * CANCEL their own request, the addressee may REJECT one sent to them.
+     * Each write is independent and best-effort, because the counterpart
+     * document usually does not exist.
+     */
+    private suspend fun closePendingRequestsWith(uid: String) {
+        val me = requireUid()
+        val cancelled = mapOf(
+            "status" to FriendRequestStatus.CANCELLED.name,
+            "respondedAt" to FieldValue.serverTimestamp(),
+        )
+        val rejected = mapOf(
+            "status" to FriendRequestStatus.REJECTED.name,
+            "respondedAt" to FieldValue.serverTimestamp(),
+        )
+        val declined = mapOf(
+            "status" to FamilyInvitationStatus.DECLINED.name,
+            "respondedAt" to FieldValue.serverTimestamp(),
+        )
+        val familyCancelled = mapOf(
+            "status" to FamilyInvitationStatus.CANCELLED.name,
+            "respondedAt" to FieldValue.serverTimestamp(),
+        )
+        suspend fun closeIfPending(reference: DocumentReference, update: Map<String, Any>) {
+            runCatching {
+                if (reference.get().await().isPending()) reference.update(update).await()
+            }
+        }
+        closeIfPending(requestDocument(me, uid), cancelled)
+        closeIfPending(requestDocument(uid, me), rejected)
+        closeIfPending(invitationDocument(me, uid), familyCancelled)
+        closeIfPending(invitationDocument(uid, me), declined)
     }
 
     override suspend fun unblockUser(uid: String) = runFriendOp {
@@ -490,6 +566,9 @@ class FriendRepositoryImpl @Inject constructor(
         awaitClose { registration.remove() }
     }.map { documents ->
         documents.map { it.toFamilyInvitation() }
+            // Same TTL mismatch as pendingRequests: the read path and the
+            // write path must agree on what is still actionable.
+            .filter { it.status == FamilyInvitationStatus.PENDING }
             .sortedByDescending { it.createdAt ?: Instant.EPOCH }
             .mapNotNull { invitation ->
                 publicProfileOf(profileOf(invitation))
@@ -608,6 +687,13 @@ class FriendRepositoryImpl @Inject constructor(
         awaitClose { registration.remove() }
     }.map { documents ->
         documents.map { it.toFriendRequest() }
+            // toFriendRequest() downgrades a stored PENDING past its TTL to
+            // EXPIRED, but the query cannot see that — it matches on the
+            // stored string. Without this filter an expired request sat in the
+            // inbox forever with working-looking Accept and Decline buttons,
+            // both of which failed: closeRequest and acceptRequest re-check
+            // isPending(), which applies the same TTL and refuses.
+            .filter { it.status == FriendRequestStatus.PENDING }
             .sortedByDescending { it.createdAt ?: Instant.EPOCH }
             .mapNotNull { request ->
                 publicProfileOf(profileOf(request))

@@ -79,10 +79,18 @@ class NotificationCentreRepositoryImpl @Inject constructor(
         }.onFailure { logger.d(TAG, "Notification publish skipped: ${it.message}") }
     }
 
+    // The mutations below use update(), not set(..., merge). A merge-write
+    // CREATES the document when it is missing, so acting on an entry that had
+    // already been deleted on another device left behind a document holding
+    // nothing but {"read": true} — which the list then rendered as a blank
+    // card with no title, body or timestamp, and which could not be dismissed
+    // because dismissing it merge-wrote it back. update() fails with NOT_FOUND
+    // instead, and the surrounding runCatching already absorbs that.
+
     override suspend fun markRead(id: String) {
         val me = auth.currentUser?.uid ?: return
         runCatching {
-            centreOf(me).document(id).set(mapOf("read" to true), SetOptions.merge()).await()
+            centreOf(me).document(id).update(mapOf("read" to true)).await()
         }.onFailure { logger.d(TAG, "markRead skipped: ${it.message}") }
     }
 
@@ -93,11 +101,7 @@ class NotificationCentreRepositoryImpl @Inject constructor(
             if (unread.isEmpty()) return
             firestore.runBatch { batch ->
                 unread.forEach { entry ->
-                    batch.set(
-                        centreOf(me).document(entry.id),
-                        mapOf("read" to true),
-                        SetOptions.merge(),
-                    )
+                    batch.update(centreOf(me).document(entry.id), mapOf("read" to true))
                 }
             }.await()
         }.onFailure { logger.d(TAG, "markAllRead skipped: ${it.message}") }
@@ -107,7 +111,7 @@ class NotificationCentreRepositoryImpl @Inject constructor(
         val me = auth.currentUser?.uid ?: return
         runCatching {
             centreOf(me).document(id)
-                .set(mapOf("archived" to archived, "read" to true), SetOptions.merge())
+                .update(mapOf("archived" to archived, "read" to true))
                 .await()
         }.onFailure { logger.d(TAG, "setArchived skipped: ${it.message}") }
     }
@@ -115,7 +119,7 @@ class NotificationCentreRepositoryImpl @Inject constructor(
     override suspend fun setPinned(id: String, pinned: Boolean) {
         val me = auth.currentUser?.uid ?: return
         runCatching {
-            centreOf(me).document(id).set(mapOf("pinned" to pinned), SetOptions.merge()).await()
+            centreOf(me).document(id).update(mapOf("pinned" to pinned)).await()
         }.onFailure { logger.d(TAG, "setPinned skipped: ${it.message}") }
     }
 
@@ -133,6 +137,11 @@ class NotificationCentreRepositoryImpl @Inject constructor(
         awaitClose { registration.remove() }
     }.map { documents ->
         documents.map { it.toNotification() }
+            // Defensive against phantoms already written by earlier builds:
+            // an entry with no timestamp and nothing to say is not a
+            // notification, it is the residue of a merge-write on a deleted
+            // document. Dropping it here makes those disappear on next launch.
+            .filter { it.createdAt != null || it.title.isNotBlank() || it.body.isNotBlank() }
             .sortedByDescending { it.createdAt ?: Instant.EPOCH }
     }
 
