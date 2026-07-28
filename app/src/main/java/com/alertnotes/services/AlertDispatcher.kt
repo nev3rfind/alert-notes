@@ -23,6 +23,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /**
@@ -49,6 +50,7 @@ class AlertDispatcher @Inject constructor(
     private val notifier: ReminderNotifier,
     private val soundPlayer: AlertSoundPlayer,
     private val overlayEngine: AlertOverlayEngine,
+    private val settingsRepository: com.alertnotes.domain.repository.SettingsRepository,
     @param:ApplicationScope private val scope: CoroutineScope,
     private val logger: AppLogger,
     private val diagnostics: ReliabilityDiagnostics,
@@ -91,10 +93,17 @@ class AlertDispatcher @Inject constructor(
                 isAppForeground,
                 isScreenUsable,
                 AcknowledgementSession.phase,
-            ) { alert, foreground, screenUsable, ackPhase ->
-                RoutingInputs(alert, foreground, screenUsable, ackPhase)
+                settingsRepository.preferences.map { it.remindersNotificationsEnabled },
+            ) { alert, foreground, screenUsable, ackPhase, alertsEnabled ->
+                RoutingInputs(alert, foreground, screenUsable, ackPhase, alertsEnabled)
             }.collect { inputs ->
-                route(inputs.alert, inputs.foreground, inputs.screenUsable, inputs.ackPhase)
+                route(
+                    alert = inputs.alert,
+                    foreground = inputs.foreground,
+                    screenUsable = inputs.screenUsable,
+                    ackPhase = inputs.ackPhase,
+                    alertsEnabled = inputs.alertsEnabled,
+                )
             }
         }
         logger.d(TAG, "Alert dispatcher started")
@@ -105,6 +114,7 @@ class AlertDispatcher @Inject constructor(
         val foreground: Boolean,
         val screenUsable: Boolean,
         val ackPhase: AcknowledgementSession.Phase,
+        val alertsEnabled: Boolean,
     )
 
     private fun route(
@@ -112,7 +122,28 @@ class AlertDispatcher @Inject constructor(
         foreground: Boolean,
         screenUsable: Boolean,
         ackPhase: AcknowledgementSession.Phase,
+        alertsEnabled: Boolean,
     ) {
+        // The "Reminder alerts" master switch. It was written to DataStore,
+        // mirrored to Firestore and rendered in two settings screens, but no
+        // delivery-path code ever read it — turning it off changed nothing.
+        //
+        // Suppression happens here rather than in the presenter on purpose:
+        // the queue entry must stay PENDING, so switching alerts back on
+        // surfaces whatever came due while they were off instead of silently
+        // discarding it.
+        if (!alertsEnabled) {
+            soundPlayer.stop()
+            overlayEngine.hide()
+            notifier.cancel()
+            if (alert != null) {
+                diagnostics.log(
+                    ReliabilityDiagnostics.STAGE_ROUTED,
+                    "Entry ${alert.entryId}: suppressed — reminder alerts are switched off",
+                )
+            }
+            return
+        }
         // The single audio authority: sound starts with the alert on EVERY
         // surface and stops the moment it is resolved — or while the user is
         // mid proof-capture.
@@ -159,12 +190,21 @@ class AlertDispatcher @Inject constructor(
                 }
             }
 
-            // Device in use but this reminder can't overlay (never-overlay
-            // preference or biometric prompt needed). With the overlay
+            // Device in use, and this reminder can't use a floating card
+            // because a biometric prompt is needed (or the overlay permission
+            // is missing for an AUTO/PREFER reminder). With the overlay
             // permission granted the app holds Android's documented
             // background-activity-launch exemption — take the user straight
             // to AlertActivity instead of hoping they notice a heads-up.
-            screenUsable && Settings.canDrawOverlays(context) -> {
+            //
+            // NEVER_OVERLAY is excluded explicitly. It used to fall in here
+            // and get a full-screen activity takeover, which is strictly more
+            // intrusive than the floating card the user just opted out of; it
+            // now falls through to the notification branch below, which is the
+            // surface the preference actually promises.
+            screenUsable &&
+                alert.reminder.overlayPreference != OverlayPreference.NEVER_OVERLAY &&
+                Settings.canDrawOverlays(context) -> {
                 overlayEngine.hide()
                 if (launchAlertActivity(alert)) {
                     notifier.cancel()

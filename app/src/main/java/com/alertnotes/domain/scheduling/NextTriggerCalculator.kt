@@ -112,7 +112,13 @@ class NextTriggerCalculator @Inject constructor() {
         repeat(MAX_MONTH_STEPS) {
             val date = month.atDay(minOf(dayOfMonth, month.lengthOfMonth()))
             if (beyondEndDate(reminder, date)) return null
-            if (date.dayOfWeek in reminder.activeDays && withinDateRange(reminder, date)) {
+            // activeDays is deliberately NOT consulted here, for the same
+            // reason OneTime ignores it: the day-of-month IS the day selector.
+            // Intersecting the two silently skipped whole months whenever the
+            // chosen date happened to land on an excluded weekday — "the 15th
+            // of every month" with weekends off vanished for any month whose
+            // 15th was a Sunday, with no error and no way to tell.
+            if (withinDateRange(reminder, date)) {
                 val candidate = date.atTime(recurrence.timeOfDay).atZone(reminder.timeZone).toInstant()
                 if (candidate > after) return candidate
             }

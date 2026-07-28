@@ -243,9 +243,15 @@ private fun EditorActions(
 ) {
     val draftTitle = editing?.draft?.title.orEmpty()
     val copyTitle = stringResource(R.string.reminder_copy_title, draftTitle)
+    val isSaving by viewModel.isSaving.collectAsStateWithLifecycle()
     TextButton(
         onClick = viewModel::save,
-        enabled = editing != null && editing.validation.isValid && (editing.isDirty || editing.isNew),
+        // !isSaving is what stops a double-tap creating two reminders and two
+        // alarms: none of the other predicates change when a save starts.
+        enabled = editing != null &&
+            editing.validation.isValid &&
+            (editing.isDirty || editing.isNew) &&
+            !isSaving,
     ) {
         Text(text = stringResource(R.string.action_save))
     }

@@ -245,6 +245,56 @@ class NextTriggerCalculatorTest {
         assertNull(calculator.nextTrigger(reminder, after))
     }
 
+    /**
+     * Regression: monthly used to intersect the day-of-month with activeDays,
+     * so "the 15th of every month" with weekends switched off silently skipped
+     * every month whose 15th fell on a Saturday or Sunday. 2026-02-15 is a
+     * Sunday, and the occurrence must still be produced - the day-of-month IS
+     * the selector, exactly as OneTime ignores activeDays.
+     */
+    @Test
+    fun `monthly ignores active days because the day of month is the selector`() {
+        val weekdaysOnly = setOf(
+            DayOfWeek.MONDAY,
+            DayOfWeek.TUESDAY,
+            DayOfWeek.WEDNESDAY,
+            DayOfWeek.THURSDAY,
+            DayOfWeek.FRIDAY,
+        )
+        val reminder = reminder(
+            Recurrence.Monthly(15, LocalTime.of(9, 0)),
+            activeDays = weekdaysOnly,
+        )
+        val after = Instant.parse("2026-02-01T00:00:00Z")
+
+        assertEquals(
+            Instant.parse("2026-02-15T09:00:00Z"),
+            calculator.nextTrigger(reminder, after),
+        )
+    }
+
+    /** The same reminder must not skip the following month either. */
+    @Test
+    fun `monthly with active days produces consecutive months`() {
+        val weekdaysOnly = setOf(
+            DayOfWeek.MONDAY,
+            DayOfWeek.TUESDAY,
+            DayOfWeek.WEDNESDAY,
+            DayOfWeek.THURSDAY,
+            DayOfWeek.FRIDAY,
+        )
+        val reminder = reminder(
+            Recurrence.Monthly(15, LocalTime.of(9, 0)),
+            activeDays = weekdaysOnly,
+        )
+
+        // 2026-03-15 is also a Sunday.
+        assertEquals(
+            Instant.parse("2026-03-15T09:00:00Z"),
+            calculator.nextTrigger(reminder, Instant.parse("2026-02-15T10:00:00Z")),
+        )
+    }
+
     // endregion
 
     // region Time zones

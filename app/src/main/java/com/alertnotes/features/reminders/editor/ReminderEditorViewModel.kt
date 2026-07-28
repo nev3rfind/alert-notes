@@ -134,6 +134,10 @@ class ReminderEditorViewModel @AssistedInject constructor(
     private val _savedForSharing = MutableStateFlow<Long?>(null)
     val savedForSharing: StateFlow<Long?> = _savedForSharing.asStateFlow()
 
+    /** True while a save is in flight; disables Save so it cannot double-fire. */
+    private val _isSaving = MutableStateFlow(false)
+    val isSaving: StateFlow<Boolean> = _isSaving.asStateFlow()
+
     /** What the draft is compared against to decide dirtiness. */
     private var baseline: Reminder? = null
 
@@ -246,6 +250,14 @@ class ReminderEditorViewModel @AssistedInject constructor(
     fun save() {
         val state = _uiState.value as? EditorUiState.Editing ?: return
         if (!state.validation.isValid) return
+        // Re-entry guard. A new reminder carries id 0 (Room's "not yet
+        // inserted"), and the coordinator's mutex serialises saves without
+        // deduplicating them — so a double-tap on Save inserted two rows and
+        // scheduled two alarms for the same reminder. None of the button's
+        // enabled predicates change when a save begins, so the guard has to
+        // live here.
+        if (_isSaving.value) return
+        _isSaving.value = true
         val now = timeProvider.now()
         val triggerIn = state.triggerIn
         val reminder = state.draft.copy(
@@ -283,6 +295,10 @@ class ReminderEditorViewModel @AssistedInject constructor(
                 _isFinished.value = true
             } catch (throwable: Throwable) {
                 logger.e(TAG, "Failed to save reminder ${reminder.id}", throwable)
+            } finally {
+                // Cleared even on success: the screen is finishing, but a
+                // failed save must leave Save usable again.
+                _isSaving.value = false
             }
         }
     }

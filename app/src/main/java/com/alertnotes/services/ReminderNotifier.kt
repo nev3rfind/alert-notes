@@ -136,9 +136,17 @@ class ReminderNotifier @Inject constructor(
             // Re-posts of the SAME alert (screen on/off, routing changes)
             // stay silent; a NEW alert on the reused id must ring again.
             .setOnlyAlertOnce(alert.entryId == lastAlertedEntryId)
-            .addAction(0, context.getString(R.string.alert_dismiss), dismissIntent)
-        if (!reminder.requiresBiometric && reminder.acknowledgement == AcknowledgementType.NONE) {
-            // NONE acknowledgement: allow direct dismissal from the shade.
+        // A reminder that demands proof must not be dismissable from the
+        // shade. The swipe-away delete intent was already gated this way, but
+        // the visible Dismiss button was not — tapping it consumed the queue
+        // entry outright and skipped the biometric prompt, the photo/location
+        // capture, the dismiss-lock countdown and the checklist gate. The
+        // notification is the normal surface whenever the screen is off, so
+        // this was the common path for exactly the reminders that carry a
+        // proof requirement. Those now offer only the content intent, which
+        // opens AlertActivity and runs the real acknowledgement flow.
+        if (reminder.allowsShadeDismissal()) {
+            builder.addAction(0, context.getString(R.string.alert_dismiss), dismissIntent)
             builder.setDeleteIntent(dismissIntent)
         }
         if (reminder.wakeScreen || reminder.showOnLockScreen) {

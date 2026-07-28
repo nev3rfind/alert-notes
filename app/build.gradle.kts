@@ -96,6 +96,22 @@ room {
     schemaDirectory("$projectDir/schemas")
 }
 
+// AGP seeds -Djava.library.path for unit tests from the machine's PATH, so a
+// single malformed PATH entry (a stray quote, an unescaped space) breaks
+// Windows command-line quoting and the test JVM never starts - the failure
+// surfaces as "Could not find or load main class", with no test ever running
+// and no hint that the environment is at fault.
+//
+// These are pure JVM tests with no native dependencies, so the jniLibs entries
+// AGP is trying to add are unused. Dropping the argument entirely makes the
+// test task depend on nothing outside the project.
+tasks.withType<Test>().configureEach {
+    doFirst {
+        systemProperties.remove("java.library.path")
+        jvmArgs = jvmArgs.orEmpty().filterNot { it.startsWith("-Djava.library.path=") }
+    }
+}
+
 dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)

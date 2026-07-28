@@ -41,7 +41,14 @@ class AlertSoundPlayer @Inject constructor(
             stop()
             return
         }
-        if (playingEntryId == alert.entryId && player != null) return
+        // Deliberately does NOT also test `player != null`. A one-shot sound
+        // releases its player on completion, so that extra condition made the
+        // guard fall through and replay the whole sound on the next routing
+        // pass — and routing re-runs on every screen-off, screen-on, unlock
+        // and app-foreground change while an alert is still pending. stop() is
+        // the only thing that clears playingEntryId, which is what makes this
+        // genuinely once-per-entry.
+        if (playingEntryId == alert.entryId) return
         stop()
         val critical = alert.reminder.priority == ReminderPriority.CRITICAL
         val soundRes = if (critical) R.raw.alert_critical else R.raw.sound_noti
