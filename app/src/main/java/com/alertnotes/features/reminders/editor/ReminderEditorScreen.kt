@@ -226,6 +226,10 @@ private fun rememberEditorSession(
             // A brand-new reminder saved in online mode flows into the
             // "who should receive this?" chooser when the host supports it.
             val shareId = viewModel.savedForSharing.value
+            // Consumed before dispatching: the tablet pane reuses this
+            // ViewModel across opens, and an unconsumed finish signal closed
+            // the pane again the instant it reopened.
+            viewModel.onFinishHandled()
             if (shareId != null && onShareSaved != null) onShareSaved(shareId) else onClose()
         }
     }

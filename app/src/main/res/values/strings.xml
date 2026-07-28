@@ -1076,4 +1076,7 @@
     <string name="account_delete_confirm_title">Delete your account?</string>
     <string name="account_delete_confirm_message">This permanently deletes your profile, username, friends, family circle, shared reminders, conversations and photos. It cannot be undone.\n\nThe reminders on this device are kept — Alert Notes simply returns to offline mode.\n\nEnter your password to confirm.</string>
     <string name="account_delete_confirm_action">Delete forever</string>
+    <string name="templates_delete_confirm_title">Delete this template?</string>
+    <string name="templates_delete_confirm_message">The template is removed from this device. Reminders you already created from it are not affected.</string>
+    <string name="friends_more_actions">More actions</string>
 </resources>

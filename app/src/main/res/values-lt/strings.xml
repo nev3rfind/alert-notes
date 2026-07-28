@@ -1093,4 +1093,7 @@
     <string name="settings_language_english">English</string>
     <string name="settings_language_lithuanian">Lietuvių</string>
     <string name="friends_block_confirm_title_generic">Blokuoti šį asmenį?</string>
+    <string name="templates_delete_confirm_title">Ištrinti šį šabloną?</string>
+    <string name="templates_delete_confirm_message">Šablonas bus pašalintas iš šio įrenginio. Anksčiau pagal jį sukurti priminimai nebus paveikti.</string>
+    <string name="friends_more_actions">Daugiau veiksmų</string>
 </resources>

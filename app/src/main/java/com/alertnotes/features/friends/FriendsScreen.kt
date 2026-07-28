@@ -19,6 +19,11 @@ import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.FamilyRestroom
 import androidx.compose.material.icons.outlined.PersonSearch
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -385,30 +390,22 @@ fun FriendsScreen(
                                     },
                                     onClick = { onOpenUser(friend.uid) },
                                 ) {
+                                    // One inline action plus an overflow menu.
+                                    // Four inline TextButtons needed more room
+                                    // than a phone has, and the identity
+                                    // column - the name and @username - is
+                                    // what gave way, collapsing to nothing.
                                     TextButton(onClick = { onOpenChat(friend.uid) }) {
                                         Text(text = stringResource(R.string.friends_message))
                                     }
-                                    if (!isFamily) {
-                                        TextButton(onClick = { viewModel.inviteToFamily(friend.uid) }) {
-                                            Text(text = stringResource(R.string.family_invite_short))
-                                        }
-                                    }
-                                    TextButton(onClick = { viewModel.removeFriend(friend.uid) }) {
-                                        Text(
-                                            text = stringResource(R.string.friends_remove),
-                                            color = MaterialTheme.colorScheme.error,
-                                        )
-                                    }
-                                    TextButton(
-                                        onClick = {
+                                    FriendRowMenu(
+                                        canInviteToFamily = !isFamily,
+                                        onInviteToFamily = { viewModel.inviteToFamily(friend.uid) },
+                                        onRemove = { viewModel.removeFriend(friend.uid) },
+                                        onBlock = {
                                             pendingBlock = friend.uid to friend.profile.displayName
                                         },
-                                    ) {
-                                        Text(
-                                            text = stringResource(R.string.friends_block),
-                                            color = MaterialTheme.colorScheme.error,
-                                        )
-                                    }
+                                    )
                                 }
                             }
                         }
@@ -700,7 +697,67 @@ internal fun FriendAvatar(profile: PublicProfile, size: androidx.compose.ui.unit
                 text = profile.displayName.firstOrNull()?.uppercaseChar()?.toString() ?: "?",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
-                color = Color.White,
+                // onPrimary is the token guaranteed to contrast with the
+                // primary circle behind it; Color.White only happened to work
+                // on the default light scheme.
+                color = MaterialTheme.colorScheme.onPrimary,
+            )
+        }
+    }
+}
+
+/**
+ * Overflow for a friend row's secondary actions. Keeping these behind one
+ * icon is what lets the name and @username keep their space on a phone.
+ */
+@Composable
+private fun FriendRowMenu(
+    canInviteToFamily: Boolean,
+    onInviteToFamily: () -> Unit,
+    onRemove: () -> Unit,
+    onBlock: () -> Unit,
+) {
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { expanded = true }) {
+            Icon(
+                imageVector = Icons.Outlined.MoreVert,
+                contentDescription = stringResource(R.string.friends_more_actions),
+            )
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            if (canInviteToFamily) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.family_invite_short)) },
+                    onClick = {
+                        expanded = false
+                        onInviteToFamily()
+                    },
+                )
+            }
+            DropdownMenuItem(
+                text = {
+                    Text(
+                        text = stringResource(R.string.friends_remove),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                },
+                onClick = {
+                    expanded = false
+                    onRemove()
+                },
+            )
+            DropdownMenuItem(
+                text = {
+                    Text(
+                        text = stringResource(R.string.friends_block),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                },
+                onClick = {
+                    expanded = false
+                    onBlock()
+                },
             )
         }
     }

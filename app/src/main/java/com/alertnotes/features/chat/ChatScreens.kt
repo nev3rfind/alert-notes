@@ -31,6 +31,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -229,10 +230,26 @@ fun ChatScreen(
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val zone = ZoneId.systemDefault()
 
+    // The list emits a day separator before the first message of each day, so
+    // the number of ROWS is larger than the number of messages. Scrolling to
+    // messages.lastIndex therefore stopped one row short per separator - in a
+    // conversation spanning several days the newest messages stayed below the
+    // fold, which reads as "my message did not send".
+    val lastRowIndex = remember(messages, zone) {
+        val separators = messages
+            .mapNotNull { it.createdAt?.atZone(zone)?.toLocalDate() }
+            .distinct()
+            .size
+        messages.size + separators - 1
+    }
+
     // Every new message: mark read + keep the list pinned to the bottom.
-    LaunchedEffect(messages.size) {
+    // Keyed on the tail message id as well as the count, so an in-place change
+    // to the last message (a status update, a server timestamp landing)
+    // re-pins too.
+    LaunchedEffect(messages.size, messages.lastOrNull()?.id) {
         viewModel.markRead()
-        if (messages.isNotEmpty()) listState.animateScrollToItem(messages.lastIndex)
+        if (lastRowIndex >= 0) listState.animateScrollToItem(lastRowIndex)
     }
 
     // Smart delivery: while this conversation is on screen, its pushes are
@@ -444,8 +461,13 @@ private fun MessageBubble(
         Box {
             Surface(
                 shape = MaterialTheme.shapes.large,
+                // primaryContainer, not primary: the bubble text used a
+                // hardcoded Color.White, which fails WCAG AA on the light
+                // theme's primary and is close to invisible on some dynamic
+                // colour schemes. The container pair is the one M3 guarantees
+                // contrast for, in both themes.
                 color = if (mine) {
-                    MaterialTheme.colorScheme.primary
+                    MaterialTheme.colorScheme.primaryContainer
                 } else {
                     MaterialTheme.colorScheme.surfaceContainerLow
                 },
@@ -460,7 +482,11 @@ private fun MessageBubble(
                     Text(
                         text = message.text,
                         style = MaterialTheme.typography.bodyLarge,
-                        color = if (mine) Color.White else MaterialTheme.colorScheme.onSurface,
+                        color = if (mine) {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurface
+                        },
                     )
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
@@ -470,7 +496,7 @@ private fun MessageBubble(
                                 .orEmpty(),
                             style = MaterialTheme.typography.labelSmall,
                             color = if (mine) {
-                                Color.White.copy(alpha = 0.7f)
+                                MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
                             } else {
                                 MaterialTheme.colorScheme.onSurfaceVariant
                             },
@@ -485,7 +511,8 @@ private fun MessageBubble(
                                     MessageStatus.SENT -> stringResource(R.string.chat_status_sent)
                                 },
                                 style = MaterialTheme.typography.labelSmall,
-                                color = Color.White.copy(alpha = 0.7f),
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    .copy(alpha = 0.7f),
                                 modifier = Modifier.padding(start = MaterialTheme.spacing.small),
                             )
                         }
@@ -1022,7 +1049,7 @@ private fun ConversationRow(
                     Text(
                         text = conversation.unreadCount.toString(),
                         style = MaterialTheme.typography.labelSmall,
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onPrimary,
                         modifier = Modifier.padding(
                             horizontal = MaterialTheme.spacing.small,
                             vertical = 2.dp,

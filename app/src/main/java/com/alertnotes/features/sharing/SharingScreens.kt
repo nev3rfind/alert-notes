@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
@@ -58,6 +59,7 @@ import com.alertnotes.core.ui.components.PrimaryButton
 import com.alertnotes.core.ui.components.PrimaryCard
 import com.alertnotes.core.ui.components.SearchField
 import com.alertnotes.core.ui.components.SectionCard
+import com.alertnotes.core.ui.components.SectionLabel
 import com.alertnotes.core.ui.components.SkeletonLine
 import com.alertnotes.core.ui.theme.spacing
 import com.alertnotes.domain.model.FriendError
@@ -627,24 +629,33 @@ fun SharedRemindersScreen(
                         }
                     }
                 }
-                if (!isLoading) item {
-                    SectionCard(title = stringResource(R.string.sharing_outgoing_title)) {
-                        if (filteredOutgoing.isEmpty()) {
+                // Emitted as real lazy items rather than a forEach inside one
+                // item. The whole outgoing list used to live in a single
+                // LazyColumn item, so every card composed at once however long
+                // the list was - defeating virtualisation entirely and firing
+                // every avatar image request simultaneously on open.
+                if (!isLoading) {
+                    item(key = "outgoing-header") {
+                        SectionLabel(text = stringResource(R.string.sharing_outgoing_title))
+                    }
+                    if (filteredOutgoing.isEmpty()) {
+                        item(key = "outgoing-empty") {
                             Text(
                                 text = stringResource(R.string.sharing_outgoing_empty),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(MaterialTheme.spacing.large),
                             )
-                        } else {
-                            filteredOutgoing.forEach { item ->
-                                OutgoingShareCard(
-                                    item = item,
-                                    onCancel = { viewModel.cancel(item.share.id) },
-                                    onEdit = { onOpenEditor(item.share.reminderId) },
-                                    onDelete = { pendingDeleteId = item.share.reminderId },
-                                )
-                            }
+                        }
+                    } else {
+                        items(filteredOutgoing, key = { it.share.id }) { item ->
+                            OutgoingShareCard(
+                                item = item,
+                                onCancel = { viewModel.cancel(item.share.id) },
+                                onEdit = { onOpenEditor(item.share.reminderId) },
+                                onDelete = { pendingDeleteId = item.share.reminderId },
+                                modifier = Modifier.animateItem(),
+                            )
                         }
                     }
                 }
@@ -771,8 +782,12 @@ private fun OutgoingShareCard(
     onCancel: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val share = item.share
+    // Each row carries its own card now that the list is virtualised: the
+    // shared SectionCard container cannot span separate lazy items.
+    PrimaryCard(modifier = modifier.fillMaxWidth()) {
     Column(
         modifier = Modifier.padding(
             horizontal = MaterialTheme.spacing.large,
@@ -877,6 +892,7 @@ private fun OutgoingShareCard(
                 }
             }
         }
+    }
     }
 }
 

@@ -21,6 +21,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -32,6 +35,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.alertnotes.R
 import com.alertnotes.core.ui.components.AppTopBar
+import com.alertnotes.core.ui.components.ConfirmationDialog
 import com.alertnotes.core.ui.components.SectionCard
 import com.alertnotes.core.ui.theme.spacing
 import com.alertnotes.core.util.TimeProvider
@@ -125,6 +129,24 @@ fun TemplatesScreen(
     val builtIns = templates.filter { it.builtIn }
     val custom = templates.filterNot { it.builtIn }
 
+    // Deleting a template was instant and irreversible - one mis-tap next to
+    // Use and Duplicate destroyed a capture the user had built by hand, with
+    // no confirmation, no undo, and no error if the write failed.
+    var pendingDelete by rememberSaveable { mutableStateOf<String?>(null) }
+    pendingDelete?.let { id ->
+        ConfirmationDialog(
+            title = stringResource(R.string.templates_delete_confirm_title),
+            message = stringResource(R.string.templates_delete_confirm_message),
+            confirmText = stringResource(R.string.action_delete),
+            isDestructive = true,
+            onConfirm = {
+                viewModel.delete(id)
+                pendingDelete = null
+            },
+            onDismiss = { pendingDelete = null },
+        )
+    }
+
     Scaffold(
         topBar = {
             AppTopBar(
@@ -161,7 +183,7 @@ fun TemplatesScreen(
                                     template = template,
                                     onUse = { viewModel.use(template) },
                                     onDuplicate = { viewModel.duplicate(template) },
-                                    onDelete = { viewModel.delete(template.id) },
+                                    onDelete = { pendingDelete = template.id },
                                 )
                             }
                         }

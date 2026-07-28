@@ -139,6 +139,21 @@ class ReminderEditorViewModel @AssistedInject constructor(
     private val _isSaving = MutableStateFlow(false)
     val isSaving: StateFlow<Boolean> = _isSaving.asStateFlow()
 
+    /**
+     * Acknowledges the finish signal so it cannot fire twice.
+     *
+     * The full-screen editor is scoped to its navigation entry and dies on
+     * close, but the tablet two-pane host keys this ViewModel by reminder id
+     * inside a longer-lived store - so reopening the same reminder returned
+     * the SAME instance with isFinished still true, and the pane slammed shut
+     * the moment it opened. These are one-shot events; they have to be
+     * consumed.
+     */
+    fun onFinishHandled() {
+        _isFinished.value = false
+        _savedForSharing.value = null
+    }
+
     /** What the draft is compared against to decide dirtiness. */
     private var baseline: Reminder? = null
 
