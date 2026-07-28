@@ -273,7 +273,8 @@ class ChatRepositoryImpl @Inject constructor(
     private suspend fun publicProfileOf(uid: String): PublicProfile? = runCatching {
         firestore.collection(FirestoreSchema.USERS).document(uid)
             .collection(FirestoreSchema.SECTION_PUBLIC).document(FirestoreSchema.SECTION_DOC)
-            .get().await().takeIf { it.exists() }?.toPublicProfile()
+            .get().await().takeIf { it.exists() }
+            ?.toPublicProfile(friendRepository.viewerRelation(uid))
     }.getOrNull()
 
     private fun DocumentSnapshot.toMessage(): ChatMessage = ChatMessage(

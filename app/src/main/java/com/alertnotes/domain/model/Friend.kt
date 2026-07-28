@@ -52,6 +52,14 @@ enum class FriendError {
     ALREADY_FAMILY,
     /** Firestore rejected the operation — security rules are out of date. */
     PERMISSION,
+
+    /**
+     * The other account's privacy settings do not admit this action —
+     * e.g. friend requests limited to friends of friends, with no mutual
+     * friend between the two accounts. Distinct from [PERMISSION] because
+     * nothing is broken: the answer is simply no.
+     */
+    PRIVACY,
     NETWORK,
     UNKNOWN,
 }

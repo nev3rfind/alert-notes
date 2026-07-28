@@ -15,8 +15,12 @@ import com.alertnotes.domain.model.FriendRequestStatus
 import com.alertnotes.domain.model.FriendRequestWithProfile
 import com.alertnotes.domain.model.FriendUser
 import com.alertnotes.domain.model.FriendshipState
+import com.alertnotes.domain.model.PrivacyAudience
+import com.alertnotes.domain.model.PrivacyControl
+import com.alertnotes.domain.model.PrivacySettings
 import com.alertnotes.domain.model.PublicProfile
 import com.alertnotes.domain.model.PublicStatistics
+import com.alertnotes.domain.model.ViewerRelation
 import com.alertnotes.domain.repository.AuthRepository
 import com.alertnotes.domain.repository.FriendRepository
 import com.google.firebase.auth.FirebaseAuth
@@ -106,11 +110,15 @@ class FriendRepositoryImpl @Inject constructor(
             if (uid == selfUid || byUid.containsKey(uid)) continue
             publicProfileOf(uid)?.let { byUid[uid] = it }
         }
-        // Secondary: display-name prefix via a collection-group query. Needs
-        // a collection-group index on public.displayName; until that exists
-        // in the console the search degrades gracefully to username-only.
+        // Secondary: display-name prefix via a collection-group query, backed
+        // by the (discoverable, displayName) collection-group index. The
+        // `discoverable` filter is not an optimisation — the security rules
+        // reject an unfiltered collection-group listing outright, because a
+        // list rule cannot evaluate privacy per result. Accounts whose profile
+        // visibility is narrower than "everyone" therefore never appear.
         runCatching {
             firestore.collectionGroup(FirestoreSchema.SECTION_PUBLIC)
+                .whereEqualTo("discoverable", true)
                 .orderBy("displayName")
                 .startAt(term)
                 .endAt(term + QUERY_END)
@@ -122,7 +130,7 @@ class FriendRepositoryImpl @Inject constructor(
         }.getOrNull()?.documents?.forEach { doc ->
             val uid = doc.ownerUid() ?: return@forEach
             if (uid != selfUid && !byUid.containsKey(uid)) {
-                byUid[uid] = doc.toPublicProfile()
+                byUid[uid] = doc.toPublicProfile(ViewerRelation.OTHER)
             }
         }
         // Blocked users never surface in search — in either direction the
@@ -139,8 +147,18 @@ class FriendRepositoryImpl @Inject constructor(
     }
 
     override fun observePublicProfile(uid: String): Flow<PublicProfile?> = callbackFlow {
+        // The relation is resolved once up front rather than per emission:
+        // it only changes when a friendship does, and that already restarts
+        // the screens that consume this flow.
+        val relation = viewerRelation(uid)
         val registration = publicDocument(uid).addSnapshotListener { snapshot, error ->
-            trySend(if (error != null) null else snapshot?.takeIf { it.exists() }?.toPublicProfile())
+            trySend(
+                if (error != null) {
+                    null
+                } else {
+                    snapshot?.takeIf { it.exists() }?.toPublicProfile(relation)
+                },
+            )
         }
         awaitClose { registration.remove() }
     }
@@ -172,14 +190,21 @@ class FriendRepositoryImpl @Inject constructor(
         if (mine.isPending() || theirs.isPending()) {
             throw FriendException(FriendError.ALREADY_PENDING)
         }
+        // Privacy gate. `viaUid` is the mutual friend that proves a
+        // friends-of-friends link; the security rules re-verify both legs of
+        // that chain, so a forged value buys nothing. Checking here only means
+        // the user gets "this person only accepts requests from friends of
+        // friends" instead of an opaque permission error.
+        val viaUid = requireAudience(toUid, PrivacyControl.FRIEND_REQUESTS)
         requestDocument(me, toUid).set(
-            mapOf(
-                "fromUid" to me,
-                "toUid" to toUid,
-                "status" to FriendRequestStatus.PENDING.name,
-                "createdAt" to FieldValue.serverTimestamp(),
-                "respondedAt" to null,
-            ),
+            buildMap {
+                put("fromUid", me)
+                put("toUid", toUid)
+                put("status", FriendRequestStatus.PENDING.name)
+                put("createdAt", FieldValue.serverTimestamp())
+                put("respondedAt", null)
+                if (viaUid != null) put("viaUid", viaUid)
+            },
         ).await()
         notificationCentre.publish(
             recipientUid = toUid,
@@ -297,6 +322,7 @@ class FriendRepositoryImpl @Inject constructor(
         if (mine.isPendingInvitation() || theirs.isPendingInvitation()) {
             throw FriendException(FriendError.ALREADY_PENDING)
         }
+        requireAudience(toUid, PrivacyControl.FAMILY_INVITATIONS)
         invitationDocument(me, toUid).set(
             mapOf(
                 "fromUid" to me,
@@ -611,8 +637,81 @@ class FriendRepositoryImpl @Inject constructor(
 
     /** One-shot profile fetch; deleted accounts simply drop out of lists. */
     private suspend fun publicProfileOf(uid: String): PublicProfile? = runCatching {
-        publicDocument(uid).get().await().takeIf { it.exists() }?.toPublicProfile()
+        publicDocument(uid).get().await().takeIf { it.exists() }
+            ?.toPublicProfile(viewerRelation(uid))
     }.getOrNull()
+
+    /**
+     * How the signed-in user is related to [uid] — the input the profile
+     * mapper needs to decide which audience-scoped fields to keep. Reads the
+     * two edge documents rather than the relationship flows so it is correct
+     * even before those listeners have emitted.
+     */
+    override suspend fun viewerRelation(uid: String): ViewerRelation {
+        val me = auth.currentUser?.uid ?: return ViewerRelation.OTHER
+        if (me == uid) return ViewerRelation.SELF
+        return runCatching {
+            when {
+                familyEdge(me, uid).get().await().exists() -> ViewerRelation.FAMILY
+                friendEdge(me, uid).get().await().exists() -> ViewerRelation.FRIEND
+                else -> ViewerRelation.OTHER
+            }
+        }.getOrDefault(ViewerRelation.OTHER)
+    }
+
+    /**
+     * A friend of the signed-in user who is also a friend of [targetUid] —
+     * the proof a FRIENDS_OF_FRIENDS gate demands. Returns null when no such
+     * link exists.
+     *
+     * The search runs client-side by design: the security rules let a user
+     * read their own friends' friend lists, so each candidate costs one
+     * document read and nothing about [targetUid]'s graph is exposed beyond
+     * the single yes/no the caller already needs. Capped so a large friend
+     * list cannot turn one tap into hundreds of reads.
+     */
+    private suspend fun mutualFriendWith(targetUid: String): String? {
+        val me = auth.currentUser?.uid ?: return null
+        val candidates = runCatching {
+            firestore.collection(FirestoreSchema.USERS).document(me)
+                .collection(FirestoreSchema.FRIENDS)
+                .limit(MUTUAL_FRIEND_SCAN_LIMIT)
+                .get()
+                .await()
+                .documents
+                .map { it.id }
+        }.getOrDefault(emptyList())
+        return candidates.firstOrNull { candidate ->
+            candidate != targetUid &&
+                runCatching { friendEdge(candidate, targetUid).get().await().exists() }
+                    .getOrDefault(false)
+        }
+    }
+
+    /**
+     * Resolves what [targetUid]'s privacy allows for [control], and — when the
+     * answer is "friends of friends" — the mutual friend that proves it.
+     * Throws [FriendError.PRIVACY] when the action is simply not permitted, so
+     * the user gets a plain explanation instead of a rules rejection.
+     */
+    private suspend fun requireAudience(
+        targetUid: String,
+        control: PrivacyControl,
+    ): String? {
+        val profile = runCatching {
+            publicDocument(targetUid).get().await().takeIf { it.exists() }
+        }.getOrNull() ?: return null
+        val audience = PrivacySettings
+            .fromMap(profile.get("privacy") as? Map<*, *>)[control]
+        val relation = viewerRelation(targetUid)
+        return when {
+            audience == PrivacyAudience.NOBODY -> throw FriendException(FriendError.PRIVACY)
+            audience == PrivacyAudience.FRIENDS_OF_FRIENDS && relation == ViewerRelation.OTHER ->
+                mutualFriendWith(targetUid) ?: throw FriendException(FriendError.PRIVACY)
+            relation.satisfies(audience) -> null
+            else -> throw FriendException(FriendError.PRIVACY)
+        }
+    }
 
     private fun DocumentSnapshot.toFriendRequest(): FriendRequest {
         val createdAt = instantField("createdAt")
@@ -705,6 +804,12 @@ class FriendRepositoryImpl @Inject constructor(
         const val MIN_QUERY_LENGTH = 2
         const val SEARCH_LIMIT = 8L
         const val QUERY_END = ""
+        /**
+         * How many of the caller's own friends are probed when looking for a
+         * mutual friend. One tap must not turn into an unbounded read fan-out;
+         * beyond this the request is simply reported as not permitted.
+         */
+        const val MUTUAL_FRIEND_SCAN_LIMIT = 40L
         val REQUEST_TTL: Duration = Duration.ofDays(30)
         val FRIEND_COUNT_UP = mapOf("friendCount" to FieldValue.increment(1))
         val FRIEND_COUNT_DOWN = mapOf("friendCount" to FieldValue.increment(-1))

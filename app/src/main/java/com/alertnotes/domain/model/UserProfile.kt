@@ -21,6 +21,13 @@ data class PublicProfile(
     val lastSeen: Instant? = null,
     /** Banner + accent personalisation; public so friends see it too. */
     val bannerTheme: ProfileTheme = ProfileTheme.PRIMARY_ORANGE,
+    /**
+     * The owner's privacy configuration. It lives in this section — not one of
+     * its own — so the security rule guarding a profile read can consult it
+     * without a second billed lookup. Readers use it to hide audience-scoped
+     * fields; the rules use it to refuse audience-scoped writes.
+     */
+    val privacy: PrivacySettings = PrivacySettings.DEFAULT,
 )
 
 /** The `private` section — visible to the account owner only. */

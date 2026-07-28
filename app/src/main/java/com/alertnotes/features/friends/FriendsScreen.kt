@@ -747,6 +747,7 @@ internal fun FriendNoticeDialog(error: FriendError, onDismiss: () -> Unit) {
                         FriendError.NOT_FRIENDS -> R.string.friends_error_not_friends
                         FriendError.ALREADY_FAMILY -> R.string.friends_error_already_family
                         FriendError.PERMISSION -> R.string.friends_error_permission
+                        FriendError.PRIVACY -> R.string.friends_error_privacy
                         FriendError.NETWORK -> R.string.auth_error_network
                         FriendError.UNKNOWN -> R.string.auth_error_unknown
                     },

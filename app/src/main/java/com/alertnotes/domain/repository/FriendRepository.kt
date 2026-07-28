@@ -9,6 +9,7 @@ import com.alertnotes.domain.model.FriendUser
 import com.alertnotes.domain.model.FriendshipState
 import com.alertnotes.domain.model.PublicProfile
 import com.alertnotes.domain.model.PublicStatistics
+import com.alertnotes.domain.model.ViewerRelation
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -35,6 +36,13 @@ interface FriendRepository {
 
     /** Live public profile of any user; null while missing/deleted. */
     fun observePublicProfile(uid: String): Flow<PublicProfile?>
+
+    /**
+     * How the signed-in user is related to [uid]. Callers that map another
+     * user's profile need this to apply the owner's audience settings; it is
+     * also what decides whether a privacy-gated action is offered at all.
+     */
+    suspend fun viewerRelation(uid: String): ViewerRelation
 
     /** Live relationship with [uid]; drives the profile action button. */
     fun observeFriendshipState(uid: String): Flow<FriendshipState>
