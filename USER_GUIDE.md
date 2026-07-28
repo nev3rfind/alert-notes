@@ -1,7 +1,18 @@
 # Alert Notes — User Guide
 
-Alert Notes is a completely offline reminder app. Nothing you create ever
-leaves your device: no accounts, no analytics, no cloud.
+Alert Notes works two ways, and you choose on first launch.
+
+**Offline mode** is the whole reminder app with nothing attached: no account,
+no analytics, no cloud, and no network connection of any kind. Nothing you
+create ever leaves your device.
+
+**Online mode** adds an account and the social features - friends, a family
+circle, sharing a reminder with someone, chat, and optional cloud backup. Your
+reminders still live on your device and still fire without a connection; the
+account only adds what you choose to share. You can change mode later in
+Settings, and delete your account from More at any time.
+
+Either way there are no advertisements and no tracking.
 
 ## First launch
 

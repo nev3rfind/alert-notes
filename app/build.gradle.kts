@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -5,6 +7,7 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
     alias(libs.plugins.room)
+    alias(libs.plugins.google.services)
 }
 
 android {
@@ -25,14 +28,58 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    // Release signing. Credentials come from keystore.properties (git-ignored)
+    // or, on CI, from the matching environment variables — never from source
+    // control. When neither is present the config is simply not created, so a
+    // contributor without the keystore can still run `assembleRelease` and get
+    // an unsigned APK instead of a build failure.
+    val keystoreProperties = Properties().apply {
+        val file = rootProject.file("keystore.properties")
+        if (file.exists()) file.inputStream().use { load(it) }
+    }
+    fun credential(key: String, env: String): String? =
+        keystoreProperties.getProperty(key) ?: System.getenv(env)
+
+    val storeFilePath = credential("storeFile", "ALERTNOTES_STORE_FILE")
+    val hasSigningCredentials = storeFilePath != null &&
+        rootProject.file(storeFilePath).exists()
+
+    signingConfigs {
+        if (hasSigningCredentials) {
+            create("release") {
+                storeFile = rootProject.file(storeFilePath!!)
+                storePassword = credential("storePassword", "ALERTNOTES_STORE_PASSWORD")
+                keyAlias = credential("keyAlias", "ALERTNOTES_KEY_ALIAS")
+                keyPassword = credential("keyPassword", "ALERTNOTES_KEY_PASSWORD")
+                // Both schemes: v1 for API 26–27, v2+ for everything newer.
+                enableV1Signing = true
+                enableV2Signing = true
+            }
+        }
+    }
+
     buildTypes {
         release {
             // R8 on: shrinks the APK (material-icons-extended alone is
             // huge unshrunk) and obfuscates the release build. Room, Hilt,
-            // and kotlinx-serialization ship consumer keep rules.
+            // and kotlinx-serialization ship consumer keep rules; the rules
+            // this app adds on top live in proguard-rules.pro.
             optimization {
                 enable = true
             }
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
+            if (hasSigningCredentials) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
+        debug {
+            // No applicationIdSuffix here: google-services.json is keyed to
+            // the com.alertnotes package, and suffixing the debug id makes the
+            // Google Services plugin fail to find a matching client.
+            versionNameSuffix = "-debug"
         }
     }
     compileOptions {
@@ -47,6 +94,22 @@ android {
 
 room {
     schemaDirectory("$projectDir/schemas")
+}
+
+// AGP seeds -Djava.library.path for unit tests from the machine's PATH, so a
+// single malformed PATH entry (a stray quote, an unescaped space) breaks
+// Windows command-line quoting and the test JVM never starts - the failure
+// surfaces as "Could not find or load main class", with no test ever running
+// and no hint that the environment is at fault.
+//
+// These are pure JVM tests with no native dependencies, so the jniLibs entries
+// AGP is trying to add are unused. Dropping the argument entirely makes the
+// test task depend on nothing outside the project.
+tasks.withType<Test>().configureEach {
+    doFirst {
+        systemProperties.remove("java.library.path")
+        jvmArgs = jvmArgs.orEmpty().filterNot { it.startsWith("-Djava.library.path=") }
+    }
 }
 
 dependencies {
@@ -82,4 +145,24 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
+
+    // Firebase (online-version branch). BoM pins every Firebase artifact.
+    // Online mode is strictly additive: Auth for accounts, Firestore for
+    // user profiles and the one-time reminder upload. FCM/Functions are
+    // not wired up yet.
+    implementation(platform(libs.firebase.bom))
+    // firebase-analytics is deliberately NOT a dependency. It was only ever
+    // present to prove the Firebase connection, with collection disabled - but
+    // it still pulled in the AD_ID permission and the advertising-services
+    // manifest entries, which have to be declared and justified to Google
+    // Play for an app that collects nothing.
+    implementation(libs.firebase.auth)
+    implementation(libs.firebase.firestore)
+    implementation(libs.firebase.storage)
+    implementation(libs.kotlinx.coroutines.play.services)
+    // Fused Location Provider: the reliable path to a fix (last-known +
+    // high-accuracy updates) for location-proof acknowledgements.
+    implementation(libs.play.services.location)
+    implementation(libs.coil.compose)
+    implementation("com.google.firebase:firebase-messaging")
 }

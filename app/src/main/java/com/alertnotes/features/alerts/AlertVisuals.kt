@@ -1,7 +1,14 @@
 package com.alertnotes.features.alerts
 
+import android.provider.Settings
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,10 +25,13 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
@@ -47,18 +57,66 @@ object AlertDefaults {
     val SwipeDismissThreshold: Dp = 120.dp
 }
 
-/** Alert accent: brand orange, or the error tone for critical reminders. */
+/**
+ * Alert accent: muted for low, brand orange by default, error red for
+ * critical — the priority's visual identity everywhere it appears.
+ */
 @Composable
 fun alertAccentColor(priority: ReminderPriority): Color {
     val accent by animateColorAsState(
         targetValue = when (priority) {
             ReminderPriority.CRITICAL -> MaterialTheme.colorScheme.error
+            ReminderPriority.LOW -> MaterialTheme.colorScheme.outline
             else -> MaterialTheme.colorScheme.primary
         },
         label = "alertAccent",
     )
     return accent
 }
+
+/**
+ * Critical reminders demand attention: a pulsing red border and a subtle
+ * full-surface flash. Both effects respect the system accessibility
+ * "remove animations" setting (animator scale 0) — with animations off,
+ * critical alerts keep a strong static red border and nothing pulses.
+ */
+@Composable
+fun Modifier.criticalAttentionEffects(priority: ReminderPriority): Modifier {
+    if (priority != ReminderPriority.CRITICAL) return this
+    val context = LocalContext.current
+    val animationsEnabled = remember {
+        Settings.Global.getFloat(
+            context.contentResolver,
+            Settings.Global.ANIMATOR_DURATION_SCALE,
+            1f,
+        ) > 0f
+    }
+    val error = MaterialTheme.colorScheme.error
+    if (!animationsEnabled) {
+        return this.border(CriticalBorderWidth, error, MaterialTheme.shapes.extraLarge)
+    }
+    val transition = rememberInfiniteTransition(label = "criticalAttention")
+    val pulse by transition.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(CRITICAL_PULSE_MILLIS),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "criticalPulse",
+    )
+    return this
+        .border(CriticalBorderWidth, error.copy(alpha = pulse), MaterialTheme.shapes.extraLarge)
+        .drawWithContent {
+            drawContent()
+            // Soft flashing wash — deliberately gentle, never strobing.
+            drawRect(color = error.copy(alpha = CRITICAL_FLASH_MAX_ALPHA * pulse))
+        }
+}
+
+private val CriticalBorderWidth = 4.dp
+private const val CRITICAL_PULSE_MILLIS = 900
+private const val CRITICAL_FLASH_MAX_ALPHA = 0.05f
 
 /** Circular tinted icon badge used by every alert presentation. */
 @Composable

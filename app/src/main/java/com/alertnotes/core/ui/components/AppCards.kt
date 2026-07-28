@@ -63,15 +63,28 @@ fun SectionCard(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Column(modifier = modifier) {
-        Text(
-            text = title.uppercase(),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(
-                start = MaterialTheme.spacing.large,
-                bottom = MaterialTheme.spacing.small,
-            ),
-        )
+        SectionLabel(text = title)
         PrimaryCard(modifier = Modifier.fillMaxWidth(), content = content)
     }
+}
+
+/**
+ * The heading [SectionCard] draws above its card, on its own.
+ *
+ * A list long enough to need virtualising cannot use [SectionCard] - that
+ * would put every row inside one lazy item and compose them all at once. Such
+ * a list emits this label as one item and its rows as their own, so the
+ * heading still looks identical to every other section in the app.
+ */
+@Composable
+fun SectionLabel(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text = text.uppercase(),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = modifier.padding(
+            start = MaterialTheme.spacing.large,
+            bottom = MaterialTheme.spacing.small,
+        ),
+    )
 }

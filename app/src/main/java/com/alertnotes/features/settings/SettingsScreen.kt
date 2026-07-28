@@ -27,10 +27,13 @@ import androidx.compose.material.icons.outlined.FolderZip
 import androidx.compose.material.icons.outlined.Fullscreen
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.PauseCircle
+import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.outlined.Verified
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -68,7 +71,9 @@ import com.alertnotes.core.ui.components.AppOutlinedButton
 import com.alertnotes.core.ui.components.AppToggleRow
 import com.alertnotes.core.ui.components.AppTopBar
 import com.alertnotes.core.ui.components.ConfirmationDialog
+import com.alertnotes.core.ui.components.OptionPickerDialog
 import com.alertnotes.core.ui.components.SectionCard
+import com.alertnotes.core.util.AppLanguage
 import com.alertnotes.core.ui.theme.spacing
 import com.alertnotes.domain.model.ThemeMode
 import com.alertnotes.domain.model.UserPreferences
@@ -84,11 +89,15 @@ fun SettingsScreen(
     onOpenBackup: () -> Unit,
     onOpenAbout: () -> Unit,
     onOpenHistory: () -> Unit,
+    onOpenReliability: () -> Unit,
+    onOpenPrivacy: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val preferences by viewModel.preferences.collectAsStateWithLifecycle()
     val permissionStates by viewModel.permissionStates.collectAsStateWithLifecycle()
+    val authUser by viewModel.authUser.collectAsStateWithLifecycle()
     var showThemeDialog by rememberSaveable { mutableStateOf(false) }
+    var showLanguageDialog by rememberSaveable { mutableStateOf(false) }
     var batteryExplanationFor by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
     val exitActivity = LocalActivity.current
@@ -142,6 +151,13 @@ fun SettingsScreen(
                 verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.extraLarge),
             ) {
                 item {
+                    ApplicationModeSection(
+                        mode = preferences.appMode,
+                        authUser = authUser,
+                        viewModel = viewModel,
+                    )
+                }
+                item {
                     SectionCard(title = stringResource(R.string.settings_section_appearance)) {
                         AppListItem(
                             title = stringResource(R.string.settings_theme),
@@ -155,6 +171,13 @@ fun SettingsScreen(
                             supportingText = stringResource(R.string.settings_dynamic_colors_subtitle),
                             checked = preferences.useDynamicColor,
                             onCheckedChange = viewModel::setUseDynamicColor,
+                        )
+                        AppListItem(
+                            title = stringResource(R.string.settings_language),
+                            supportingText = stringResource(viewModel.currentLanguage.labelRes),
+                            leadingIcon = Icons.Outlined.Language,
+                            onClick = { showLanguageDialog = true },
+                            trailingContent = { TrailingChevron() },
                         )
                     }
                 }
@@ -182,6 +205,13 @@ fun SettingsScreen(
                 }
                 item {
                     SectionCard(title = stringResource(R.string.settings_section_permissions)) {
+                        AppListItem(
+                            title = stringResource(R.string.settings_reliability_row),
+                            supportingText = stringResource(R.string.settings_reliability_row_subtitle),
+                            leadingIcon = Icons.Outlined.Verified,
+                            onClick = onOpenReliability,
+                            trailingContent = { TrailingChevron() },
+                        )
                         permissionStates.forEach { state ->
                             PermissionRow(state = state, onClick = { onPermissionClick(state) })
                         }
@@ -217,6 +247,13 @@ fun SettingsScreen(
                 }
                 item {
                     SectionCard(title = stringResource(R.string.settings_section_privacy)) {
+                        AppListItem(
+                            title = stringResource(R.string.privacy_row_title),
+                            supportingText = stringResource(R.string.privacy_row_subtitle),
+                            leadingIcon = Icons.Outlined.Shield,
+                            onClick = onOpenPrivacy,
+                            trailingContent = { TrailingChevron() },
+                        )
                         Text(
                             text = stringResource(R.string.settings_privacy_statement),
                             style = MaterialTheme.typography.bodyMedium,
@@ -299,6 +336,21 @@ fun SettingsScreen(
                 showThemeDialog = false
             },
             onDismiss = { showThemeDialog = false },
+        )
+    }
+    if (showLanguageDialog) {
+        OptionPickerDialog(
+            title = stringResource(R.string.settings_language),
+            options = AppLanguage.entries,
+            selected = viewModel.currentLanguage,
+            optionLabel = { stringResource(it.labelRes) },
+            onSelect = { language ->
+                showLanguageDialog = false
+                // Below API 33 the platform does not restart us, so the new
+                // catalogue only reaches the UI on an explicit recreate.
+                if (viewModel.setLanguage(language)) exitActivity?.recreate()
+            },
+            onDismiss = { showLanguageDialog = false },
         )
     }
     if (batteryExplanationFor) {

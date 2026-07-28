@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Shared only with the camera app: avatar capture (cache) and
+     acknowledgement photo proofs (files — must survive until uploaded). -->
+<paths>
+    <cache-path
+        name="camera"
+        path="camera/" />
+    <files-path
+        name="ack_proofs"
+        path="ack_proofs/" />
+</paths>

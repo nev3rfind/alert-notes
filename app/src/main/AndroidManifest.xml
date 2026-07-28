@@ -3,9 +3,17 @@
 
     <!-- Rebuild alarms after a reboot. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-    <!-- Fire reminders at their exact time (user-grantable on Android 12+;
-         the scheduler degrades to inexact alarms when not granted). -->
-    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <!-- Fire reminders at their exact time. Alarms are this app's core
+         function, so on Android 13+ USE_EXACT_ALARM applies (granted
+         automatically, cannot be revoked); SCHEDULE_EXACT_ALARM covers
+         Android 12 where it is the only option. -->
+    <uses-permission
+        android:name="android.permission.SCHEDULE_EXACT_ALARM"
+        android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <!-- Keep the CPU awake for the seconds between alarm delivery and the
+         alert appearing on screen. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- Surface due reminders when the app is in the background. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Alarm-style reminders may take over the screen when due. -->
@@ -14,11 +22,17 @@
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <!-- Fingerprint / face acknowledgement. -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <!-- Online mode only: Firebase Auth + Firestore. Offline mode never
+         opens a connection. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Location-proof acknowledgements only; requested at capture time. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
-    <!-- allowBackup=false: the app's core promise is that reminder data
-         never leaves the device. Cloud/device-to-device backup would upload
-         the Room database and settings to Google servers; users have the
-         explicit local ZIP export instead. -->
+    <!-- allowBackup=false: reminder data leaves the device only through the
+         user's explicit choices — the local ZIP export, or opt-in online
+         mode. Cloud/device-to-device OS backup would upload the Room
+         database and settings to Google servers without that consent. -->
     <application
         android:name=".AlertNotesApplication"
         android:allowBackup="false"
@@ -27,7 +41,34 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:enableOnBackInvokedCallback="true"
+        android:localeConfig="@xml/locales_config"
         android:theme="@style/Theme.AlertNotes">
+
+        <!-- Offline mode promises no network connection at all, and Firebase
+             Cloud Messaging breaks that on its own: auto-init registers a
+             Firebase installation and opens a connection from
+             FirebaseInitProvider, before any app code runs, whichever mode the
+             user picked. Auto-init is therefore off by default and switched on
+             by PushTokenManager only once the user is in online mode and
+             signed in. The flag the SDK sets then persists.
+
+             (The analytics SDK is no longer a dependency, so there is nothing
+             left to disable here for it.) -->
+        <meta-data
+            android:name="firebase_messaging_auto_init_enabled"
+            android:value="false" />
+
+        <!-- Hands the camera app a writable cache URI for avatar capture. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="com.alertnotes.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -41,6 +82,19 @@
             </intent-filter>
         </activity>
 
+        <!-- Proof capture (camera / location) in a NORMAL-launchMode task:
+             singleInstance AlertActivity cannot receive cross-task results,
+             so proofs resolve through AcknowledgementSession instead. -->
+        <activity
+            android:name=".ProofCaptureActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTop"
+            android:showWhenLocked="true"
+            android:taskAffinity=""
+            android:turnScreenOn="true"
+            android:theme="@style/Theme.AlertNotes" />
+
         <!-- Full-screen alert window: over the lock screen, wakes the display. -->
         <activity
             android:name=".AlertActivity"
@@ -52,6 +106,17 @@
             android:taskAffinity=""
             android:theme="@style/Theme.AlertNotes" />
 
+        <!-- FCM entry point: data-only pushes for chat, social, sharing, and
+             silent sync wake-ups. Notifications the user sees are always
+             built locally (channels, deep links, smart suppression). -->
+        <service
+            android:name=".services.AlertNotesMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
         <receiver
             android:name=".services.ReminderAlarmReceiver"
             android:exported="false" />
@@ -60,9 +125,17 @@
             android:name=".services.AlertActionReceiver"
             android:exported="false" />
 
+        <!-- exported="true" is REQUIRED, not optional, on the three receivers
+             below: their broadcasts originate in system_server, and a
+             non-exported receiver rejects any sender outside its own uid. With
+             exported="false" the boot sweep never runs and alarms stay lost
+             until the user next opens the app. Exporting costs nothing here —
+             BOOT_COMPLETED, MY_PACKAGE_REPLACED, TIME_SET, TIMEZONE_CHANGED,
+             DATE_CHANGED and APPWIDGET_UPDATE are all protected broadcasts, so
+             the platform refuses to let any other app send them. -->
         <receiver
             android:name=".services.BootCompletedReceiver"
-            android:exported="false">
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
@@ -71,7 +144,7 @@
 
         <receiver
             android:name=".services.TimeChangeReceiver"
-            android:exported="false">
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.TIME_SET" />
                 <action android:name="android.intent.action.TIMEZONE_CHANGED" />
@@ -81,7 +154,7 @@
 
         <receiver
             android:name=".widgets.AlertNotesWidgetReceiver"
-            android:exported="false"
+            android:exported="true"
             android:label="@string/widget_description">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />

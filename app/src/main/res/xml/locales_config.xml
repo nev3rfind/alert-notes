@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Languages Alert Notes ships translations for.
+
+    On Android 13+ this powers the per-app language entry in system Settings,
+    and it is what makes LocaleManager.setApplicationLocales() legitimate. The
+    in-app switcher in Settings writes through to the same place, so the two
+    never disagree.
+
+    Order matters only as a hint; en is the default because values/ (untagged)
+    holds the English catalogue.
+-->
+<locale-config xmlns:android="http://schemas.android.com/apk/res/android">
+    <locale android:name="en" />
+    <locale android:name="lt" />
+</locale-config>

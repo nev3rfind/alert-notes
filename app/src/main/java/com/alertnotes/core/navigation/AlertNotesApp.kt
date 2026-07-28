@@ -1,5 +1,6 @@
 package com.alertnotes.core.navigation
 
+import androidx.activity.compose.LocalActivity
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -34,7 +35,11 @@ import com.alertnotes.core.ui.rememberWindowWidthClass
  * phones, a navigation rail on tablets and wide windows — around the nav host.
  */
 @Composable
-fun AlertNotesApp(createReminderRequestId: Int = 0) {
+fun AlertNotesApp(
+    createReminderRequestId: Int = 0,
+    deepLink: String? = null,
+    deepLinkRequestId: Int = 0,
+) {
     val windowWidthClass = rememberWindowWidthClass()
     val navController = rememberNavController()
 
@@ -49,19 +54,40 @@ fun AlertNotesApp(createReminderRequestId: Int = 0) {
             navController.navigate(ReminderEditorRoute(Reminder.NEW_ID))
         }
     }
+
+    // Push-notification taps: same consume-once pattern as the widget.
+    var consumedDeepLinkRequestId by rememberSaveable { mutableIntStateOf(0) }
+    LaunchedEffect(deepLinkRequestId) {
+        if (deepLinkRequestId > consumedDeepLinkRequestId && deepLink != null) {
+            consumedDeepLinkRequestId = deepLinkRequestId
+            when {
+                deepLink.startsWith("chat:") ->
+                    navController.navigate(ChatRoute(deepLink.removePrefix("chat:")))
+
+                deepLink == "shared" -> navController.navigate(SharedRemindersRoute)
+                deepLink == "inbox" -> navController.navigate(InboxRoute)
+                else -> navController.navigate(NotificationCentreRoute)
+            }
+        }
+    }
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination
     val isTopLevelScreen = TopLevelDestination.entries.any { destination ->
         currentDestination.isDestinationSelected(destination)
     }
     val useNavigationRail = windowWidthClass != WindowWidthClass.Compact
+    // Exit closes only the UI — AlarmManager schedules and reminder data are
+    // untouched. It lives in the More menu now, not on the bar itself.
+    val exitActivity = LocalActivity.current
+    val onExit: () -> Unit = { exitActivity?.finishAndRemoveTask() }
 
     Row(modifier = Modifier.fillMaxSize()) {
         if (useNavigationRail) {
             AppNavigationRail(
-                destinations = TopLevelDestination.entries,
-                isSelected = { currentDestination.isDestinationSelected(it) },
+                destinations = RailDestination.entries,
+                isSelected = { currentDestination.isRouteSelected(it.route) },
                 onNavigate = { navController.navigateToTopLevel(it.route) },
+                onExit = onExit,
             )
         }
         Scaffold(
@@ -84,6 +110,7 @@ fun AlertNotesApp(createReminderRequestId: Int = 0) {
         ) { innerPadding ->
             AlertNotesNavHost(
                 navController = navController,
+                onExit = onExit,
                 modifier = Modifier
                     .padding(innerPadding)
                     .consumeWindowInsets(innerPadding)
@@ -94,4 +121,7 @@ fun AlertNotesApp(createReminderRequestId: Int = 0) {
 }
 
 private fun NavDestination?.isDestinationSelected(destination: TopLevelDestination): Boolean =
-    this?.hierarchy?.any { it.hasRoute(destination.route::class) } == true
+    isRouteSelected(destination.route)
+
+private fun NavDestination?.isRouteSelected(route: Any): Boolean =
+    this?.hierarchy?.any { it.hasRoute(route::class) } == true

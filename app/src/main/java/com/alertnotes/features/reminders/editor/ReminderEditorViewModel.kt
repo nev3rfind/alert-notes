@@ -26,6 +26,7 @@ import java.time.temporal.ChronoUnit
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /** Field-level validation results; null means the field is valid. */
@@ -104,6 +105,9 @@ class ReminderEditorViewModel @AssistedInject constructor(
     @Assisted("initialEpochDay") private val initialEpochDay: Long,
     private val reminderRepository: ReminderRepository,
     private val coordinator: ReminderSchedulingCoordinator,
+    private val settingsRepository: com.alertnotes.domain.repository.SettingsRepository,
+    private val templateRepository: com.alertnotes.domain.repository.TemplateRepository,
+    private val sharingRepository: com.alertnotes.domain.repository.ReminderSharingRepository,
     private val timeProvider: TimeProvider,
     private val logger: AppLogger,
 ) : ViewModel() {
@@ -122,6 +126,33 @@ class ReminderEditorViewModel @AssistedInject constructor(
     /** Set once the edit session is complete; hosts close the editor. */
     private val _isFinished = MutableStateFlow(false)
     val isFinished: StateFlow<Boolean> = _isFinished.asStateFlow()
+
+    /**
+     * Id of a NEWLY created reminder saved in online mode — hosts that can
+     * navigate offer the "who should receive this?" flow instead of just
+     * closing. Never set by edits, deletes, or duplicates.
+     */
+    private val _savedForSharing = MutableStateFlow<Long?>(null)
+    val savedForSharing: StateFlow<Long?> = _savedForSharing.asStateFlow()
+
+    /** True while a save is in flight; disables Save so it cannot double-fire. */
+    private val _isSaving = MutableStateFlow(false)
+    val isSaving: StateFlow<Boolean> = _isSaving.asStateFlow()
+
+    /**
+     * Acknowledges the finish signal so it cannot fire twice.
+     *
+     * The full-screen editor is scoped to its navigation entry and dies on
+     * close, but the tablet two-pane host keys this ViewModel by reminder id
+     * inside a longer-lived store - so reopening the same reminder returned
+     * the SAME instance with isFinished still true, and the pane slammed shut
+     * the moment it opened. These are one-shot events; they have to be
+     * consumed.
+     */
+    fun onFinishHandled() {
+        _isFinished.value = false
+        _savedForSharing.value = null
+    }
 
     /** What the draft is compared against to decide dirtiness. */
     private var baseline: Reminder? = null
@@ -235,6 +266,14 @@ class ReminderEditorViewModel @AssistedInject constructor(
     fun save() {
         val state = _uiState.value as? EditorUiState.Editing ?: return
         if (!state.validation.isValid) return
+        // Re-entry guard. A new reminder carries id 0 (Room's "not yet
+        // inserted"), and the coordinator's mutex serialises saves without
+        // deduplicating them — so a double-tap on Save inserted two rows and
+        // scheduled two alarms for the same reminder. None of the button's
+        // enabled predicates change when a save begins, so the guard has to
+        // live here.
+        if (_isSaving.value) return
+        _isSaving.value = true
         val now = timeProvider.now()
         val triggerIn = state.triggerIn
         val reminder = state.draft.copy(
@@ -259,10 +298,23 @@ class ReminderEditorViewModel @AssistedInject constructor(
         )
         viewModelScope.launch {
             try {
-                coordinator.saveAndSchedule(reminder)
+                val savedId = coordinator.saveAndSchedule(reminder)
+                // Brand-new reminders in online mode flow into the sharing
+                // chooser; edits close as before.
+                val online = runCatching {
+                    settingsRepository.preferences.first().appMode ==
+                        com.alertnotes.domain.model.AppMode.ONLINE
+                }.getOrDefault(false)
+                if (state.isNew && online) {
+                    _savedForSharing.value = savedId
+                }
                 _isFinished.value = true
             } catch (throwable: Throwable) {
                 logger.e(TAG, "Failed to save reminder ${reminder.id}", throwable)
+            } finally {
+                // Cleared even on success: the screen is finishing, but a
+                // failed save must leave Save usable again.
+                _isSaving.value = false
             }
         }
     }
@@ -272,11 +324,55 @@ class ReminderEditorViewModel @AssistedInject constructor(
         if (state.isNew) return
         viewModelScope.launch {
             try {
-                coordinator.delete(state.draft.id)
+                // Deleting a reminder that was shared has to cancel its shares
+                // too, otherwise the recipients keep a scheduled copy of a
+                // reminder the owner believes is gone - and the owner's
+                // dashboard keeps tracking a reminder that no longer exists.
+                // deleteOwnedReminder cancels every live share, tells the
+                // recipients, and then deletes the local reminder.
+                deleteWithShares(state.draft.id)
                 _isFinished.value = true
             } catch (throwable: Throwable) {
                 logger.e(TAG, "Failed to delete reminder ${state.draft.id}", throwable)
             }
+        }
+    }
+
+    /** Online: cancel shares then delete. Offline: there are no shares. */
+    private suspend fun deleteWithShares(reminderId: Long) {
+        val online = runCatching {
+            settingsRepository.preferences.first().appMode ==
+                com.alertnotes.domain.model.AppMode.ONLINE
+        }.getOrDefault(false)
+        if (online) {
+            runCatching { sharingRepository.deleteOwnedReminder(reminderId) }
+                .getOrElse {
+                    logger.w(TAG, "Share cancellation failed; deleting locally anyway", it)
+                    coordinator.delete(reminderId)
+                }
+        } else {
+            coordinator.delete(reminderId)
+        }
+    }
+
+    /** Captures the draft's behaviour (never its schedule) as a template. */
+    fun saveAsTemplate() {
+        val state = _uiState.value as? EditorUiState.Editing ?: return
+        viewModelScope.launch {
+            runCatching {
+                templateRepository.saveCustom(
+                    com.alertnotes.domain.model.ReminderTemplate(
+                        id = java.util.UUID.randomUUID().toString(),
+                        name = state.draft.title.trim().ifBlank { DEFAULT_TEMPLATE_NAME },
+                        title = state.draft.title.trim(),
+                        description = state.draft.description.trim(),
+                        priority = state.draft.priority,
+                        type = state.draft.type,
+                        acknowledgement = state.draft.acknowledgement,
+                        theme = state.draft.theme,
+                    ),
+                )
+            }.onFailure { logger.e(TAG, "Save as template failed", it) }
         }
     }
 
@@ -393,6 +489,7 @@ class ReminderEditorViewModel @AssistedInject constructor(
 
     private companion object {
         const val TAG = "ReminderEditor"
+        const val DEFAULT_TEMPLATE_NAME = "My template"
         const val MAX_MINUTES = 10_080L // one week
         const val MAX_HOURS = 720L // thirty days
         const val DEFAULT_DAY_OF_MONTH = 1

@@ -5,6 +5,9 @@ import com.alertnotes.core.util.AppLogger
 import com.alertnotes.di.ApplicationScope
 import com.alertnotes.domain.scheduling.ReminderSchedulingCoordinator
 import com.alertnotes.services.AlertDispatcher
+import com.alertnotes.services.PresenceManager
+import com.alertnotes.services.ShareDeliveryObserver
+import com.google.firebase.FirebaseApp
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
@@ -27,9 +30,25 @@ class AlertNotesApplication : Application() {
     @Inject
     lateinit var logger: AppLogger
 
+    /** Mirrors foreground state to the online profile; no-op offline. */
+    @Inject
+    lateinit var presenceManager: PresenceManager
+
+    /** Auto-delivers family-shared reminders; no-op offline. */
+    @Inject
+    lateinit var shareDeliveryObserver: ShareDeliveryObserver
+
+    /** Keeps this device's FCM token registered; no-op offline. */
+    @Inject
+    lateinit var pushTokenManager: com.alertnotes.services.PushTokenManager
+
     override fun onCreate() {
         super.onCreate()
+        verifyFirebase()
         alertDispatcher.start()
+        presenceManager.start()
+        shareDeliveryObserver.start()
+        pushTokenManager.start()
         // Reconcile alarms on every process start: a force-stop (aggressive
         // battery managers, "Force stop" in app info) silently cancels every
         // AlarmManager alarm, and boot/time receivers never fire for that
@@ -38,6 +57,36 @@ class AlertNotesApplication : Application() {
         applicationScope.launch {
             runCatching { coordinator.rescheduleAll() }
                 .onFailure { logger.e(TAG, "Startup alarm reconciliation failed", it) }
+        }
+    }
+
+    /**
+     * Verifies the Firebase connection at startup. The SDK's
+     * FirebaseInitProvider normally auto-initializes the default app from
+     * google-services.json before onCreate even runs, so this is a guarded,
+     * idempotent check — it initializes manually ONLY if that didn't happen
+     * (never a second time) and surfaces the outcome in Logcat either way.
+     * No Firebase product (Auth/Firestore/FCM/Functions) is used yet.
+     */
+    private fun verifyFirebase() {
+        try {
+            val app = FirebaseApp.getApps(this).firstOrNull()
+                ?: FirebaseApp.initializeApp(this)
+            if (app != null) {
+                logger.i(
+                    TAG,
+                    "Firebase initialized: app=${app.name}, " +
+                        "project=${app.options.projectId}, appId=${app.options.applicationId}",
+                )
+            } else {
+                logger.e(
+                    TAG,
+                    "Firebase initialization FAILED — google-services.json missing or invalid",
+                )
+            }
+        } catch (throwable: Throwable) {
+            // Firebase must never take the reminder engine down with it.
+            logger.e(TAG, "Firebase initialization FAILED", throwable)
         }
     }
 
