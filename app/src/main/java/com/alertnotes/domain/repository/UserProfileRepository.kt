@@ -58,4 +58,11 @@ interface UserProfileRepository {
 
     /** Presence transition or heartbeat; every write stamps lastSeen. */
     suspend fun setPresence(state: com.alertnotes.domain.model.PresenceState)
+
+    /**
+     * Replaces the account's privacy configuration. Also republishes presence,
+     * so turning the online status off (or back on) is visible to others
+     * immediately rather than at the next heartbeat.
+     */
+    suspend fun updatePrivacy(settings: com.alertnotes.domain.model.PrivacySettings)
 }

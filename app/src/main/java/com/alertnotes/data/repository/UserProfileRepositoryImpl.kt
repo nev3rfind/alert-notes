@@ -9,6 +9,9 @@ import com.alertnotes.data.remote.UserProfileRemoteDataSource
 import com.alertnotes.domain.model.AuthError
 import com.alertnotes.domain.model.AuthException
 import com.alertnotes.domain.model.AvatarUpload
+import com.alertnotes.domain.model.PrivacyAudience
+import com.alertnotes.domain.model.PrivacyControl
+import com.alertnotes.domain.model.PrivacySettings
 import com.alertnotes.domain.model.PrivateProfile
 import com.alertnotes.domain.model.ProfileMetadata
 import com.alertnotes.domain.model.ProfileStatistics
@@ -16,6 +19,7 @@ import com.alertnotes.domain.model.ProfileTheme
 import com.alertnotes.domain.model.PublicProfile
 import com.alertnotes.domain.model.SecurityInfo
 import com.alertnotes.domain.model.UserProfile
+import com.alertnotes.domain.model.ViewerRelation
 import com.alertnotes.domain.repository.AuthRepository
 import com.alertnotes.domain.repository.UserProfileRepository
 import com.google.firebase.auth.EmailAuthProvider
@@ -30,6 +34,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.tasks.await
@@ -59,7 +64,9 @@ class UserProfileRepositoryImpl @Inject constructor(
                 ) { publicDoc, privateDoc, securityDoc, statisticsDoc, metadataDoc ->
                     UserProfile(
                         uid = user.uid,
-                        publicProfile = publicDoc.toPublicProfile(),
+                        // The owner always sees their own profile in full,
+                        // whatever audiences they have configured for others.
+                        publicProfile = publicDoc.toPublicProfile(ViewerRelation.SELF),
                         privateProfile = privateDoc.toPrivateProfile(),
                         security = securityDoc.toSecurityInfo(),
                         statistics = statisticsDoc.toProfileStatistics(),
@@ -180,8 +187,39 @@ class UserProfileRepositoryImpl @Inject constructor(
 
     override suspend fun setPresence(state: com.alertnotes.domain.model.PresenceState) {
         val user = auth.currentUser ?: return
-        profileDataSource.setPresence(user.uid, state)
+        // NOBODY is enforced by not writing the value at all, so there is
+        // nothing in the document for a modified client to read. The narrower
+        // audiences are applied when a profile is mapped for a viewer.
+        val privacy = currentPrivacy()
+        profileDataSource.setPresence(
+            uid = user.uid,
+            state = state,
+            hidePresence = privacy[PrivacyControl.ONLINE_STATUS] == PrivacyAudience.NOBODY,
+            hideLastSeen = privacy[PrivacyControl.LAST_SEEN] == PrivacyAudience.NOBODY,
+        )
     }
+
+    override suspend fun updatePrivacy(settings: PrivacySettings) {
+        val user = requireUser()
+        runAuthOp {
+            profileDataSource.updatePrivacy(user.uid, settings)
+            // Presence is republished immediately so switching a status to (or
+            // away from) "nobody" takes effect now rather than at the next
+            // heartbeat, which can be minutes away.
+            profileDataSource.setPresence(
+                uid = user.uid,
+                state = com.alertnotes.domain.model.PresenceState.ONLINE,
+                hidePresence = settings[PrivacyControl.ONLINE_STATUS] == PrivacyAudience.NOBODY,
+                hideLastSeen = settings[PrivacyControl.LAST_SEEN] == PrivacyAudience.NOBODY,
+            )
+        }
+        logger.i(TAG, "Privacy settings updated")
+    }
+
+    /** The live privacy map, falling back to defaults when unavailable. */
+    private suspend fun currentPrivacy(): PrivacySettings =
+        runCatching { profile.first()?.publicProfile?.privacy }
+            .getOrNull() ?: PrivacySettings.DEFAULT
 
     private fun requireUser(): FirebaseUser =
         auth.currentUser ?: throw AuthException(AuthError.UNKNOWN)

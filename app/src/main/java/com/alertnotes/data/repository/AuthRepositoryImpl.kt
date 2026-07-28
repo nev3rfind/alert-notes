@@ -7,6 +7,7 @@ import com.alertnotes.domain.model.AuthError
 import com.alertnotes.domain.model.AuthException
 import com.alertnotes.domain.model.AuthUser
 import com.alertnotes.domain.repository.AuthRepository
+import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.userProfileChangeRequest
@@ -16,6 +17,7 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeoutOrNull
 
 @Singleton
 class AuthRepositoryImpl @Inject constructor(
@@ -99,18 +101,52 @@ class AuthRepositoryImpl @Inject constructor(
         // Best-effort farewell while the rules still allow the writes: mark
         // OFFLINE and drop this device's push token so a signed-out device
         // can never receive another notification for the account.
+        //
+        // Time-boxed, because a Firestore write Task only completes when the
+        // BACKEND acknowledges it. With no connection the write is queued
+        // locally and the Task never completes, so awaiting it here used to
+        // hang signOut() forever — the button appeared to do nothing. The
+        // queued writes still flush on reconnect; the timeout only stops the
+        // session teardown waiting for them.
         auth.currentUser?.let { user ->
-            runCatching {
-                profileDataSource.setPresence(
-                    user.uid,
-                    com.alertnotes.domain.model.PresenceState.OFFLINE,
-                )
-            }.onFailure { logger.w(TAG, "Offline presence write failed", it) }
-            runCatching { deviceDataSource.clearPushToken(user.uid) }
-                .onFailure { logger.w(TAG, "Push token clear failed", it) }
+            withTimeoutOrNull(FAREWELL_TIMEOUT_MILLIS) {
+                runCatching {
+                    profileDataSource.setPresence(
+                        user.uid,
+                        com.alertnotes.domain.model.PresenceState.OFFLINE,
+                    )
+                }.onFailure { logger.w(TAG, "Offline presence write failed", it) }
+                runCatching { deviceDataSource.clearPushToken(user.uid) }
+                    .onFailure { logger.w(TAG, "Push token clear failed", it) }
+            } ?: logger.w(TAG, "Farewell writes timed out — signing out anyway")
         }
         auth.signOut()
         logger.i(TAG, "Signed out")
+    }
+
+    override suspend fun deleteAccount(currentPassword: String) {
+        val user = auth.currentUser ?: throw AuthException(AuthError.UNKNOWN)
+        val email = user.email ?: throw AuthException(AuthError.UNKNOWN)
+        // Firebase refuses deletion on a session older than a few minutes, so
+        // re-authenticate first. This doubles as the confirmation step: the
+        // person holding the phone must know the password.
+        runAuthOp {
+            user.reauthenticate(EmailAuthProvider.getCredential(email, currentPassword)).await()
+        }
+        // Release the username immediately. It is the one document another
+        // account can be blocked by, and the client is the only party the
+        // rules let delete it. Time-boxed for the same reason as signOut.
+        withTimeoutOrNull(FAREWELL_TIMEOUT_MILLIS) {
+            runCatching { profileDataSource.releaseUsername(user.uid) }
+                .onFailure { logger.w(TAG, "Username release failed", it) }
+            runCatching { deviceDataSource.clearPushToken(user.uid) }
+                .onFailure { logger.w(TAG, "Push token clear failed", it) }
+        }
+        // Deleting the auth user fires the server-side cascade that removes
+        // every remaining document and Storage object. Doing it last means a
+        // failure here leaves the account intact rather than orphaned.
+        runAuthOp { user.delete().await() }
+        logger.i(TAG, "Account deleted")
     }
 
     private suspend fun rollbackRegistration(user: FirebaseUser) {
@@ -146,5 +182,12 @@ class AuthRepositoryImpl @Inject constructor(
 
     private companion object {
         const val TAG = "AuthRepository"
+
+        /**
+         * Ceiling on the best-effort writes that precede ending a session.
+         * Long enough to land on a working connection, short enough that a
+         * user on a plane still gets signed out promptly.
+         */
+        const val FAREWELL_TIMEOUT_MILLIS = 3_000L
     }
 }

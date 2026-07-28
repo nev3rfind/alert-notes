@@ -19,6 +19,7 @@
 
 const { onDocumentCreated, onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { setGlobalOptions } = require("firebase-functions/v2");
+const functionsV1 = require("firebase-functions/v1");
 const admin = require("firebase-admin");
 
 admin.initializeApp();
@@ -26,6 +27,7 @@ setGlobalOptions({ region: "europe-west1", maxInstances: 10 });
 
 const db = admin.firestore();
 const messaging = admin.messaging();
+const bucket = admin.storage().bucket();
 
 /** Sends a data-only push to every registered device of one user. */
 async function sendToUser(uid, data) {
@@ -200,3 +202,96 @@ exports.onReminderShare = onDocumentWritten("reminderShares/{shareId}", async (e
     });
   }
 });
+
+// ===========================================================================
+// Account deletion cascade
+// ===========================================================================
+//
+// Google Play requires an in-app way to delete an account AND the data behind
+// it. The client can delete its own auth user, but it cannot reach the other
+// half of a relationship — the friend edge sitting in someone else's
+// subcollection, the share document the counterparty also owns — because the
+// security rules (correctly) refuse those writes once the session is gone.
+//
+// This trigger runs with admin privileges after the auth user disappears, so
+// the cascade completes even if the app is killed mid-way. It is idempotent:
+// every step is a delete, and re-running it on an already-clean account is a
+// no-op. The username reservation is released by the client beforehand, while
+// it still holds the session that the rules require.
+// ===========================================================================
+
+/** Deletes a query's documents in chunks, respecting the 500-write batch cap. */
+async function deleteQuery(query) {
+  const BATCH = 400;
+  for (;;) {
+    const snapshot = await query.limit(BATCH).get();
+    if (snapshot.empty) return;
+    const batch = db.batch();
+    snapshot.docs.forEach((doc) => batch.delete(doc.ref));
+    await batch.commit();
+    if (snapshot.size < BATCH) return;
+  }
+}
+
+/** Removes the mirrored edge this account holds in other users' documents. */
+async function removeMirroredEdges(uid, collection) {
+  const own = await db.collection(`users/${uid}/${collection}`).get();
+  const peers = own.docs.map((doc) => doc.id);
+  // Chunked so a very large graph cannot exceed the batch limit.
+  for (let i = 0; i < peers.length; i += 400) {
+    const batch = db.batch();
+    peers.slice(i, i + 400).forEach((peerUid) => {
+      batch.delete(db.doc(`users/${peerUid}/${collection}/${uid}`));
+      // Keep the peer's public counter honest rather than leaving it inflated.
+      const field = collection === "friends" ? "friendCount" : "familyCount";
+      batch.set(
+        db.doc(`users/${peerUid}/statistics/data`),
+        { [field]: admin.firestore.FieldValue.increment(-1) },
+        { merge: true },
+      );
+    });
+    await batch.commit();
+  }
+}
+
+exports.onAccountDeleted = functionsV1
+  .region("europe-west1")
+  .auth.user()
+  .onDelete(async (user) => {
+    const uid = user.uid;
+
+    // 1. Mirrored relationship edges, before the local copies are removed.
+    await removeMirroredEdges(uid, "friends").catch(() => {});
+    await removeMirroredEdges(uid, "family").catch(() => {});
+
+    // 2. Everything under users/{uid}, subcollections included.
+    await db.recursiveDelete(db.doc(`users/${uid}`));
+
+    // 3. Top-level documents that name this account on either side.
+    for (const [collection, fields] of [
+      ["friendRequests", ["fromUid", "toUid"]],
+      ["familyInvitations", ["fromUid", "toUid"]],
+      ["reminderShares", ["ownerUid", "recipientUid"]],
+    ]) {
+      for (const field of fields) {
+        await deleteQuery(db.collection(collection).where(field, "==", uid));
+      }
+    }
+
+    // 4. Conversations. The document id is the two uids sorted and joined, so
+    //    membership is decidable without reading anything.
+    const chats = await db.collection("chats")
+      .where("participants", "array-contains", uid)
+      .get();
+    for (const chat of chats.docs) {
+      await db.recursiveDelete(chat.ref);
+    }
+
+    // 5. Storage: the avatar and every acknowledgement proof.
+    await Promise.all([
+      bucket.file(`avatars/${uid}.jpg`).delete().catch(() => {}),
+      bucket.deleteFiles({ prefix: `ackProofs/${uid}/` }).catch(() => {}),
+    ]);
+
+    console.log(`Account cascade complete for ${uid}`);
+  });

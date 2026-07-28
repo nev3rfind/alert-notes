@@ -5,6 +5,8 @@ import com.alertnotes.BuildConfig
 import com.alertnotes.domain.model.AppMode
 import com.alertnotes.domain.model.AuthError
 import com.alertnotes.domain.model.AuthException
+import com.alertnotes.domain.model.PresenceState
+import com.alertnotes.domain.model.PrivacySettings
 import com.alertnotes.domain.repository.SettingsRepository
 import com.google.firebase.firestore.DocumentReference
 import com.google.firebase.firestore.DocumentSnapshot
@@ -81,10 +83,17 @@ class UserProfileRemoteDataSource @Inject constructor(
             "username" to username,
             "photoUrl" to null,
             "statusMessage" to "",
-            // Presence is a future feature; the fields exist from day one so
-            // adding it never requires a schema migration.
             "online" to false,
+            "presenceState" to PresenceState.OFFLINE.name,
             "lastSeen" to FieldValue.serverTimestamp(),
+            // Privacy ships with the profile itself: the security rule that
+            // guards a profile read consults this map on the document it is
+            // already reading, so no extra lookup is billed on that path.
+            "privacy" to PrivacySettings.DEFAULT.toMap(),
+            // Denormalised from profileVisibility because user search is a
+            // collection-group query, and a rule cannot evaluate a per-result
+            // condition on a query — only on a field the query filters by.
+            "discoverable" to PrivacySettings.DEFAULT.isDiscoverable,
         )
         val privateProfile = mapOf(
             "email" to email,
@@ -233,17 +242,70 @@ class UserProfileRemoteDataSource @Inject constructor(
         }.await()
     }
 
-    /** Presence transition or heartbeat; lastSeen is stamped every write. */
-    suspend fun setPresence(uid: String, state: com.alertnotes.domain.model.PresenceState) {
-        val update = mapOf(
+    /**
+     * Frees this account's username reservation, called just before the
+     * account itself is deleted.
+     *
+     * The security rules let only the holder delete their own reservation, so
+     * this cannot be left to the server-side cascade running after the auth
+     * user is gone — it has to happen while the session is still valid.
+     */
+    suspend fun releaseUsername(uid: String) {
+        val username = section(uid, FirestoreSchema.SECTION_PUBLIC)
+            .get()
+            .await()
+            .getString("username")
+            .orEmpty()
+        if (username.isBlank()) return
+        firestore.collection(FirestoreSchema.USERNAMES)
+            .document(username.lowercase())
+            .delete()
+            .await()
+    }
+
+    /**
+     * Presence transition or heartbeat; lastSeen is stamped every write.
+     *
+     * [hidePresence] and [hideLastSeen] come from the owner's privacy
+     * settings. When an audience is NOBODY the value is not merely filtered on
+     * the way out — it is never written, so there is nothing in the document
+     * for a modified client to read. Readers apply the narrower audiences (see
+     * `toPublicProfile`), which is sound because those viewers are already
+     * entitled to open the profile.
+     */
+    suspend fun setPresence(
+        uid: String,
+        state: com.alertnotes.domain.model.PresenceState,
+        hidePresence: Boolean = false,
+        hideLastSeen: Boolean = false,
+    ) {
+        val effective = if (hidePresence) PresenceState.OFFLINE else state
+        val update = buildMap<String, Any?> {
             // Legacy boolean kept for older readers; presenceState is the
             // richer truth (ONLINE / AWAY / OFFLINE).
-            "online" to (state == com.alertnotes.domain.model.PresenceState.ONLINE),
-            "presenceState" to state.name,
-            "lastSeen" to FieldValue.serverTimestamp(),
-        )
+            put("online", effective == PresenceState.ONLINE)
+            put("presenceState", effective.name)
+            if (!hideLastSeen) put("lastSeen", FieldValue.serverTimestamp())
+        }
         section(uid, FirestoreSchema.SECTION_PUBLIC)
             .set(update, SetOptions.merge())
+            .await()
+    }
+
+    /**
+     * Persists the privacy configuration, keeping the denormalised
+     * `discoverable` flag in step. Both live on the public document, so this
+     * is a single merge write and the two can never drift apart.
+     */
+    suspend fun updatePrivacy(uid: String, settings: PrivacySettings) {
+        section(uid, FirestoreSchema.SECTION_PUBLIC)
+            .set(
+                mapOf(
+                    "privacy" to settings.toMap(),
+                    "discoverable" to settings.isDiscoverable,
+                ),
+                SetOptions.merge(),
+            )
             .await()
     }
 

@@ -36,6 +36,25 @@ interface AuthRepository {
     /**
      * Ends the session, marking the public profile offline first (while the
      * write is still authorized). Local data is never touched.
+     *
+     * The farewell writes are strictly best-effort and time-boxed: signing out
+     * must succeed even with no connection.
      */
     suspend fun signOut()
+
+    /**
+     * Permanently deletes the account and everything the cloud holds about it.
+     *
+     * Google Play requires an in-app path to this for any app that lets users
+     * create an account. [currentPassword] is required because Firebase treats
+     * deletion as a sensitive operation and rejects it on a stale session.
+     *
+     * Local reminders are deliberately left alone — deleting the cloud account
+     * returns the app to offline mode, it does not wipe the user's data off
+     * their own device. The cloud cascade (profile sections, username
+     * reservation, relationship edges on both sides, shares, chats, avatars and
+     * acknowledgement proofs) runs server-side in response to the deletion, so
+     * it completes even if the app is killed mid-way.
+     */
+    suspend fun deleteAccount(currentPassword: String)
 }

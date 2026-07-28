@@ -12,8 +12,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.Logout
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.CloudSync
+import androidx.compose.material.icons.outlined.DeleteForever
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
@@ -45,17 +50,23 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.alertnotes.R
 import com.alertnotes.domain.model.AppMode
+import com.alertnotes.domain.model.AuthError
+import com.alertnotes.domain.model.AuthException
 import com.alertnotes.domain.repository.AuthRepository
 import com.alertnotes.domain.repository.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import com.alertnotes.core.ui.components.AppListItem
+import com.alertnotes.core.ui.components.AppTextField
 import com.alertnotes.core.ui.components.AppTopBar
+import com.alertnotes.features.account.messageRes
 import com.alertnotes.core.ui.components.SectionCard
 import com.alertnotes.core.ui.theme.spacing
 
@@ -84,7 +95,20 @@ fun MoreScreen(
 ) {
     val showAccountActions by viewModel.showAccountActions
         .collectAsStateWithLifecycle()
+    val deletion by viewModel.deletion.collectAsStateWithLifecycle()
     var showLogOutDialog by rememberSaveable { mutableStateOf(false) }
+    var showDeleteDialog by rememberSaveable { mutableStateOf(false) }
+
+    if (showDeleteDialog) {
+        DeleteAccountDialog(
+            state = deletion,
+            onConfirm = viewModel::deleteAccount,
+            onDismiss = {
+                showDeleteDialog = false
+                viewModel.dismissDeletionError()
+            },
+        )
+    }
     if (showLogOutDialog) {
         AlertDialog(
             onDismissRequest = { showLogOutDialog = false },
@@ -246,6 +270,15 @@ fun MoreScreen(
                                 leadingIconTint = MaterialTheme.colorScheme.error,
                                 onClick = { showLogOutDialog = true },
                             )
+                            // Google Play requires an in-app route to account
+                            // deletion for any app that offers sign-up.
+                            AppListItem(
+                                title = stringResource(R.string.account_delete_title),
+                                supportingText = stringResource(R.string.account_delete_subtitle),
+                                leadingIcon = Icons.Outlined.DeleteForever,
+                                leadingIconTint = MaterialTheme.colorScheme.error,
+                                onClick = { showDeleteDialog = true },
+                            )
                         }
                     }
                 }
@@ -279,6 +312,9 @@ class MoreViewModel @Inject constructor(
         preferences.appMode == AppMode.ONLINE && user != null
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
+    private val _deletion = MutableStateFlow<AccountDeletionState>(AccountDeletionState.Idle)
+    val deletion: StateFlow<AccountDeletionState> = _deletion.asStateFlow()
+
     fun logOut() {
         viewModelScope.launch {
             runCatching { authRepository.signOut() }
@@ -286,6 +322,107 @@ class MoreViewModel @Inject constructor(
             runCatching { settingsRepository.clearAppMode() }
         }
     }
+
+    /**
+     * Deletes the cloud account. Local reminders are untouched — the app
+     * simply returns to the offline mode chooser, which is what a user
+     * deleting their *account* (not their data) expects.
+     */
+    fun deleteAccount(password: String) {
+        if (_deletion.value == AccountDeletionState.Working) return
+        _deletion.value = AccountDeletionState.Working
+        viewModelScope.launch {
+            runCatching { authRepository.deleteAccount(password) }
+                .onSuccess {
+                    runCatching { settingsRepository.clearAppMode() }
+                    _deletion.value = AccountDeletionState.Idle
+                }
+                .onFailure { throwable ->
+                    val error = (throwable as? AuthException)?.error ?: AuthError.UNKNOWN
+                    _deletion.value = AccountDeletionState.Failed(error)
+                }
+        }
+    }
+
+    fun dismissDeletionError() {
+        _deletion.value = AccountDeletionState.Idle
+    }
+}
+
+/** Progress of the irreversible account deletion. */
+sealed interface AccountDeletionState {
+    data object Idle : AccountDeletionState
+    data object Working : AccountDeletionState
+    data class Failed(val error: AuthError) : AccountDeletionState
+}
+
+/**
+ * Irreversible-action dialog for account deletion.
+ *
+ * Two deliberate guards: the consequences are spelled out in full, and the
+ * password must be typed. The password is not theatre — Firebase rejects
+ * deletion on a stale session, so re-authentication is required anyway; asking
+ * for it here turns a technical requirement into the confirmation step.
+ */
+@Composable
+private fun DeleteAccountDialog(
+    state: AccountDeletionState,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var password by rememberSaveable { mutableStateOf("") }
+    val working = state == AccountDeletionState.Working
+    AlertDialog(
+        // A dismiss mid-delete would leave the user staring at a screen whose
+        // account no longer exists.
+        onDismissRequest = { if (!working) onDismiss() },
+        shape = MaterialTheme.shapes.extraLarge,
+        icon = {
+            Icon(
+                imageVector = Icons.Outlined.DeleteForever,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.error,
+            )
+        },
+        title = { Text(text = stringResource(R.string.account_delete_confirm_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.medium)) {
+                Text(
+                    text = stringResource(R.string.account_delete_confirm_message),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                AppTextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    label = stringResource(R.string.auth_field_password),
+                    isError = state is AccountDeletionState.Failed,
+                    errorText = (state as? AccountDeletionState.Failed)
+                        ?.let { stringResource(it.error.messageRes()) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    visualTransformation = PasswordVisualTransformation(),
+                )
+                if (working) {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(password) },
+                enabled = password.isNotBlank() && !working,
+            ) {
+                Text(
+                    text = stringResource(R.string.account_delete_confirm_action),
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !working) {
+                Text(text = stringResource(R.string.action_cancel))
+            }
+        },
+    )
 }
 
 @Composable
