@@ -1096,4 +1096,5 @@
     <string name="templates_delete_confirm_title">Ištrinti šį šabloną?</string>
     <string name="templates_delete_confirm_message">Šablonas bus pašalintas iš šio įrenginio. Anksčiau pagal jį sukurti priminimai nebus paveikti.</string>
     <string name="friends_more_actions">Daugiau veiksmų</string>
+    <string name="friends_error_payload_too_large">Šis priminimas per didelis išsiųsti. Pabandykite supaprastinti jo piešinį.</string>
 </resources>

@@ -784,14 +784,27 @@ class ReminderSharingRepositoryImpl @Inject constructor(
         false
     }
 
-    private fun encodePayload(reminder: Reminder): String = json.encodeToString(
-        BackupReminder.serializer(),
-        reminder.copy(
-            isArchived = false,
-            nextTriggerAt = null,
-            lastTriggeredAt = null,
-        ).toEntity().toBackup(),
-    )
+    private fun encodePayload(reminder: Reminder): String {
+        val payload = json.encodeToString(
+            BackupReminder.serializer(),
+            reminder.copy(
+                isArchived = false,
+                nextTriggerAt = null,
+                lastTriggeredAt = null,
+            ).toEntity().toBackup(),
+        )
+        // A drawing reminder serialises its strokes as JSON, so the payload
+        // grows with how much the user drew. Firestore rejects any document
+        // over 1 MiB, and without this the failure surfaced as a generic
+        // "something went wrong" after the send appeared to start. Fail early
+        // and specifically, well under the hard limit so the rest of the
+        // document always fits.
+        if (payload.length > MAX_PAYLOAD_CHARS) {
+            logger.w(TAG, "Payload for reminder ${reminder.id} is ${payload.length} chars — refusing")
+            throw FriendException(FriendError.PAYLOAD_TOO_LARGE)
+        }
+        return payload
+    }
 
     /**
      * Human schedule preview. An archived (recipients-only) master has no
@@ -925,6 +938,12 @@ class ReminderSharingRepositoryImpl @Inject constructor(
 
         /** Grace period before an unsubscribed listener is torn down. */
         const val SHARE_TIMEOUT_MILLIS = 5_000L
+
+        /**
+         * Payload ceiling in characters. Firestore documents cap at 1 MiB;
+         * 700k leaves ample room for every other field on the share.
+         */
+        const val MAX_PAYLOAD_CHARS = 700_000
 
         /**
          * Statuses a share may be recreated from. Everything else is a live

@@ -102,6 +102,32 @@
       "indexes": []
     },
     {
+      "//": "Same for the cloud reminder backup: a serialised blob, never queried.",
+      "collectionGroup": "reminders",
+      "fieldPath": "payload",
+      "indexes": []
+    },
+    {
+      "//": [
+        "Acknowledgement evidence: a signature is a JSON stroke list, the proof",
+        "URL is a long tokenised Storage link, and the schedule summary is",
+        "display prose. None is ever filtered or ordered on."
+      ],
+      "collectionGroup": "reminderShares",
+      "fieldPath": "ackSignature",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "reminderShares",
+      "fieldPath": "ackPhotoUrl",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "reminderShares",
+      "fieldPath": "scheduleSummary",
+      "indexes": []
+    },
+    {
       "//": "Message bodies are never queried by value; only ordered by createdAt.",
       "collectionGroup": "messages",
       "fieldPath": "text",

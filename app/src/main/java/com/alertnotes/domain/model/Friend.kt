@@ -60,6 +60,11 @@ enum class FriendError {
      * nothing is broken: the answer is simply no.
      */
     PRIVACY,
+    /**
+     * The reminder is too large to share. Drawing strokes serialise as JSON,
+     * so an elaborate drawing can exceed what one Firestore document holds.
+     */
+    PAYLOAD_TOO_LARGE,
     NETWORK,
     UNKNOWN,
 }

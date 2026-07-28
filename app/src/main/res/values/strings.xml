@@ -1079,4 +1079,5 @@
     <string name="templates_delete_confirm_title">Delete this template?</string>
     <string name="templates_delete_confirm_message">The template is removed from this device. Reminders you already created from it are not affected.</string>
     <string name="friends_more_actions">More actions</string>
+    <string name="friends_error_payload_too_large">This reminder is too large to send. Try simplifying its drawing.</string>
 </resources>
