@@ -41,8 +41,18 @@ const MALLORY = 'malloryUid'
 
 let testEnv
 
-/** Signed-in Firestore handle for `uid`, with rules enforced. */
-const as = (uid) => testEnv.authenticatedContext(uid).firestore()
+/**
+ * Signed-in Firestore handle for `uid`, with rules enforced.
+ *
+ * Verified by default: reaching another account requires a confirmed email
+ * address, and that is the normal state for a real user. Use [asUnverified]
+ * to exercise the gate itself.
+ */
+const as = (uid) => testEnv.authenticatedContext(uid, { email_verified: true }).firestore()
+
+/** Signed in, but the email address has not been confirmed. */
+const asUnverified = (uid) =>
+  testEnv.authenticatedContext(uid, { email_verified: false }).firestore()
 
 /** Seeds a document with rules disabled — arranging state, not exercising it. */
 const seed = (fn) => testEnv.withSecurityRulesDisabled((ctx) => fn(ctx.firestore()))
@@ -556,6 +566,60 @@ describe('notification centre', () => {
         injected: 'payload',
       }),
     )
+  })
+})
+
+describe('email verification', () => {
+  const req = (from, to) => `friendRequests/${from}_${to}`
+  const pending = (from, to) => ({
+    fromUid: from,
+    toUid: to,
+    status: 'PENDING',
+    createdAt: serverTimestamp(),
+    respondedAt: null,
+  })
+
+  beforeEach(async () => {
+    await seedProfile(ALICE)
+    await seedProfile(BOB)
+    await seedFriendship(ALICE, BOB)
+  })
+
+  it('refuses to let an unverified account reach another user', async () => {
+    await assertFails(
+      setDoc(doc(asUnverified(ALICE), req(ALICE, CAROL)), pending(ALICE, CAROL)),
+    )
+    const chatId = [ALICE, BOB].sort().join('_')
+    await assertFails(
+      setDoc(doc(asUnverified(ALICE), `chats/${chatId}/messages/m1`), {
+        senderUid: ALICE,
+        text: 'hi',
+        type: 'TEXT',
+        status: 'SENT',
+        deletedFor: [],
+        createdAt: serverTimestamp(),
+      }),
+    )
+    await assertFails(
+      setDoc(doc(asUnverified(ALICE), `users/${BOB}/notifications/x`), {
+        category: 'FRIEND_REQUEST',
+        title: 't',
+        body: 'b',
+        senderUid: ALICE,
+        refId: '',
+        read: false,
+        archived: false,
+        pinned: false,
+        createdAt: serverTimestamp(),
+      }),
+    )
+  })
+
+  it('still lets an unverified account manage its own data', async () => {
+    await assertSucceeds(
+      setDoc(doc(asUnverified(ALICE), `users/${ALICE}/preferences/data`), { theme: 'DARK' }),
+    )
+    await assertSucceeds(getDoc(doc(asUnverified(ALICE), publicDoc(ALICE))))
   })
 })
 

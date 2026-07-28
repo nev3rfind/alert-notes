@@ -72,6 +72,14 @@ class AuthRepositoryImpl @Inject constructor(
             rollbackRegistration(user)
             throw exception
         }
+        // Send the verification mail at registration, which is the only moment
+        // the user is expecting it. Previously nothing was ever sent unless
+        // the user found the Verify action buried in the profile screen, so
+        // essentially every account stayed unverified - which made the
+        // verified flag meaningless as an authorization input. Best-effort:
+        // a mail-send failure must not undo a good registration.
+        runCatching { user.sendEmailVerification().await() }
+            .onFailure { logger.w(TAG, "Verification mail could not be sent", it) }
         registerDevice(user)
         markOnline(user)
         // i-level logs ship in release builds and must stay free of user
@@ -178,6 +186,7 @@ class AuthRepositoryImpl @Inject constructor(
         uid = uid,
         email = email.orEmpty(),
         displayName = displayName.orEmpty(),
+        isEmailVerified = isEmailVerified,
     )
 
     private companion object {

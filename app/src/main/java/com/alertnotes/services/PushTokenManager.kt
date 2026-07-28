@@ -44,9 +44,30 @@ class PushTokenManager @Inject constructor(
             ) { mode, user -> if (mode == AppMode.ONLINE) user?.uid else null }
                 .distinctUntilChanged()
                 .collectLatest { uid ->
-                    if (uid != null) registerCurrentToken(uid)
+                    // FCM auto-init is switched OFF in the manifest, so a
+                    // device in offline mode registers no Firebase
+                    // installation and opens no connection - which is what
+                    // offline mode promises. Enabling it here is the first
+                    // moment the user has actually chosen online mode and
+                    // signed in. The setter persists, so this survives
+                    // restarts, and it starts the sync itself.
+                    if (uid != null) {
+                        enableMessagingAutoInit()
+                        registerCurrentToken(uid)
+                    }
                 }
         }
+    }
+
+    /** Idempotent; the SDK persists the flag and no-ops when already set. */
+    private fun enableMessagingAutoInit() {
+        runCatching {
+            val messaging = FirebaseMessaging.getInstance()
+            if (!messaging.isAutoInitEnabled) {
+                messaging.isAutoInitEnabled = true
+                logger.i(TAG, "FCM auto-init enabled for online mode")
+            }
+        }.onFailure { logger.w(TAG, "Could not enable FCM auto-init", it) }
     }
 
     /** Called by the messaging service when FCM rotates the token. */

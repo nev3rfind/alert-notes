@@ -47,6 +47,20 @@ service cloud.firestore {
       return signedIn() && uid() == userId;
     }
 
+    /**
+     * A confirmed email address, straight from the ID token.
+     *
+     * Required to reach another account at all — sending a friend request, an
+     * invitation, a share, a message, or writing into someone's notification
+     * centre. Anything confined to the caller's own data stays available
+     * unverified, so a new user can set up their profile while the mail is in
+     * flight. The profile's `security.emailVerified` field is a client-written
+     * display mirror and is deliberately NOT consulted here.
+     */
+    function verified() {
+      return signedIn() && request.auth.token.email_verified == true;
+    }
+
     // ---------------------------------------------------------------------
     // Relationship helpers
     // ---------------------------------------------------------------------
@@ -252,7 +266,7 @@ service cloud.firestore {
       match /notifications/{entryId} {
         allow get, list: if isSelf(userId);
         allow create: if isSelf(userId)
-          || (signedIn()
+          || (verified()
               && request.resource.data.senderUid == uid()
               && notBlocked(userId)
               && request.resource.data.keys().hasOnly(
@@ -333,7 +347,7 @@ service cloud.firestore {
       // list rule is decidable from the query alone.
       allow list: if signedIn();
 
-      allow create: if signedIn()
+      allow create: if verified()
         && requestId == uid() + '_' + request.resource.data.toUid
         && request.resource.data.fromUid == uid()
         && request.resource.data.toUid != uid()
@@ -371,7 +385,7 @@ service cloud.firestore {
         && (resource.data.fromUid == uid() || resource.data.toUid == uid());
       allow list: if signedIn();
 
-      allow create: if signedIn()
+      allow create: if verified()
         && invitationId == uid() + '_' + request.resource.data.toUid
         && request.resource.data.fromUid == uid()
         && request.resource.data.toUid != uid()
@@ -450,6 +464,7 @@ service cloud.firestore {
         allow get, list: if inChat();
 
         allow create: if inChat()
+          && verified()
           && request.resource.data.senderUid == uid()
           && notBlocked(otherUid())
           && connected(otherUid())
@@ -502,7 +517,7 @@ service cloud.firestore {
       // Both listeners filter on ownerUid or recipientUid.
       allow list: if signedIn();
 
-      allow create: if signedIn()
+      allow create: if verified()
         && shareId == uid() + '_' + string(request.resource.data.reminderId)
                           + '_' + request.resource.data.recipientUid
         && request.resource.data.ownerUid == uid()

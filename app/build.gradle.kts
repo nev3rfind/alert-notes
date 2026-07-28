@@ -151,7 +151,11 @@ dependencies {
     // user profiles and the one-time reminder upload. FCM/Functions are
     // not wired up yet.
     implementation(platform(libs.firebase.bom))
-    implementation(libs.firebase.analytics)
+    // firebase-analytics is deliberately NOT a dependency. It was only ever
+    // present to prove the Firebase connection, with collection disabled - but
+    // it still pulled in the AD_ID permission and the advertising-services
+    // manifest entries, which have to be declared and justified to Google
+    // Play for an app that collects nothing.
     implementation(libs.firebase.auth)
     implementation(libs.firebase.firestore)
     implementation(libs.firebase.storage)

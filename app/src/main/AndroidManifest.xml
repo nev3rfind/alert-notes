@@ -44,11 +44,18 @@
         android:localeConfig="@xml/locales_config"
         android:theme="@style/Theme.AlertNotes">
 
-        <!-- The analytics SDK ships only to verify the Firebase connection.
-             Collection stays off so offline mode's no-tracking promise
-             holds; nothing in the app ever enables it at runtime. -->
+        <!-- Offline mode promises no network connection at all, and Firebase
+             Cloud Messaging breaks that on its own: auto-init registers a
+             Firebase installation and opens a connection from
+             FirebaseInitProvider, before any app code runs, whichever mode the
+             user picked. Auto-init is therefore off by default and switched on
+             by PushTokenManager only once the user is in online mode and
+             signed in. The flag the SDK sets then persists.
+
+             (The analytics SDK is no longer a dependency, so there is nothing
+             left to disable here for it.) -->
         <meta-data
-            android:name="firebase_analytics_collection_enabled"
+            android:name="firebase_messaging_auto_init_enabled"
             android:value="false" />
 
         <!-- Hands the camera app a writable cache URI for avatar capture. -->
