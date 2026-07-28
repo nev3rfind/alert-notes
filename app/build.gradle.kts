@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -26,14 +28,58 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    // Release signing. Credentials come from keystore.properties (git-ignored)
+    // or, on CI, from the matching environment variables — never from source
+    // control. When neither is present the config is simply not created, so a
+    // contributor without the keystore can still run `assembleRelease` and get
+    // an unsigned APK instead of a build failure.
+    val keystoreProperties = Properties().apply {
+        val file = rootProject.file("keystore.properties")
+        if (file.exists()) file.inputStream().use { load(it) }
+    }
+    fun credential(key: String, env: String): String? =
+        keystoreProperties.getProperty(key) ?: System.getenv(env)
+
+    val storeFilePath = credential("storeFile", "ALERTNOTES_STORE_FILE")
+    val hasSigningCredentials = storeFilePath != null &&
+        rootProject.file(storeFilePath).exists()
+
+    signingConfigs {
+        if (hasSigningCredentials) {
+            create("release") {
+                storeFile = rootProject.file(storeFilePath!!)
+                storePassword = credential("storePassword", "ALERTNOTES_STORE_PASSWORD")
+                keyAlias = credential("keyAlias", "ALERTNOTES_KEY_ALIAS")
+                keyPassword = credential("keyPassword", "ALERTNOTES_KEY_PASSWORD")
+                // Both schemes: v1 for API 26–27, v2+ for everything newer.
+                enableV1Signing = true
+                enableV2Signing = true
+            }
+        }
+    }
+
     buildTypes {
         release {
             // R8 on: shrinks the APK (material-icons-extended alone is
             // huge unshrunk) and obfuscates the release build. Room, Hilt,
-            // and kotlinx-serialization ship consumer keep rules.
+            // and kotlinx-serialization ship consumer keep rules; the rules
+            // this app adds on top live in proguard-rules.pro.
             optimization {
                 enable = true
             }
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
+            if (hasSigningCredentials) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
+        debug {
+            // No applicationIdSuffix here: google-services.json is keyed to
+            // the com.alertnotes package, and suffixing the debug id makes the
+            // Google Services plugin fail to find a matching client.
+            versionNameSuffix = "-debug"
         }
     }
     compileOptions {
