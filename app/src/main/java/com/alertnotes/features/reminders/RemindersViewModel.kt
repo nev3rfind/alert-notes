@@ -10,6 +10,7 @@ import com.alertnotes.domain.model.Reminder
 import com.alertnotes.domain.repository.ReminderQueueRepository
 import com.alertnotes.domain.repository.ReminderRepository
 import com.alertnotes.domain.scheduling.ReminderSchedulingCoordinator
+import com.alertnotes.domain.model.AppMode
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
@@ -19,6 +20,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -52,6 +54,8 @@ class RemindersViewModel @Inject constructor(
     reminderRepository: ReminderRepository,
     queueRepository: ReminderQueueRepository,
     private val coordinator: ReminderSchedulingCoordinator,
+    private val settingsRepository: com.alertnotes.domain.repository.SettingsRepository,
+    private val sharingRepository: com.alertnotes.domain.repository.ReminderSharingRepository,
     private val timeProvider: TimeProvider,
     private val logger: AppLogger,
 ) : ViewModel() {
@@ -138,11 +142,35 @@ class RemindersViewModel @Inject constructor(
         launchSafely("duplicate reminder ${reminder.id}") { coordinator.saveAndSchedule(copy) }
     }
 
-    /** Deletes immediately; the snackbar offers undo via [undoDelete]. */
+    /**
+     * Deletes immediately; the snackbar offers undo via [undoDelete].
+     *
+     * Online, deletion goes through the sharing repository so every live share
+     * of this reminder is cancelled and its recipients are told - otherwise
+     * they keep a scheduled copy of a reminder the owner thinks is gone.
+     *
+     * Undo is deliberately NOT offered for a reminder that had shares:
+     * restoring the local row would not re-issue the cancelled shares, so the
+     * owner would get back a reminder the recipients no longer have, with the
+     * dashboard silently disagreeing with reality. Deleting a shared reminder
+     * is a decision the user makes once.
+     */
     fun delete(reminder: Reminder) {
         launchSafely("delete reminder ${reminder.id}") {
+            val online = runCatching {
+                settingsRepository.preferences.first().appMode == AppMode.ONLINE
+            }.getOrDefault(false)
+            val hadShares = if (online) {
+                runCatching { sharingRepository.cancelSharesFor(reminder.id) }
+                    .getOrElse {
+                        logger.w(TAG, "Share cancellation failed for ${reminder.id}", it)
+                        false
+                    }
+            } else {
+                false
+            }
             coordinator.delete(reminder.id)
-            _recentlyDeleted.value = reminder
+            _recentlyDeleted.value = reminder.takeUnless { hadShares }
         }
     }
 

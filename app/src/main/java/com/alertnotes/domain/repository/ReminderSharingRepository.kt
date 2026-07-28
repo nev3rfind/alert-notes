@@ -63,6 +63,15 @@ interface ReminderSharingRepository {
      */
     suspend fun deleteOwnedReminder(reminderId: Long)
 
+    /**
+     * Cancels every live share of [reminderId] and notifies its recipients,
+     * without touching the local reminder. Returns true when at least one
+     * share was cancelled — callers use that to decide whether offering undo
+     * would be honest, since restoring the local row does not re-issue a
+     * cancelled share.
+     */
+    suspend fun cancelSharesFor(reminderId: Long): Boolean
+
     /** Recipient approves a pending content update and re-schedules. */
     suspend fun acceptShareUpdate(share: ReminderShare)
 

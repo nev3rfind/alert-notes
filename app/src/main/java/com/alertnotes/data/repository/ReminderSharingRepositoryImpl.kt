@@ -46,6 +46,8 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 
 /**
@@ -130,7 +132,15 @@ class ReminderSharingRepositoryImpl @Inject constructor(
         if (recipients.isEmpty()) throw FriendException(FriendError.PERMISSION)
         recipients.forEach { recipientUid ->
             val familyMember = familyMembers.firstOrNull { it.uid == recipientUid }
-            val autoDeliver = familyMember?.permissions?.autoReceiveReminders == true
+            // Read the RECIPIENT's edge, not our own. "Reminders arrive
+            // automatically" decides whether a reminder is scheduled on
+            // someone else's device without them approving it, so it has to be
+            // their setting that governs it. Reading it from the sender's edge
+            // meant the recipient's choice was inert and any family member
+            // could arm alarms on another member's phone by flipping a switch
+            // on their own side.
+            val autoDeliver = familyMember != null &&
+                recipientAllowsAutoDelivery(recipientUid, owner)
             val relationship = if (familyMember != null) {
                 RelationshipType.FAMILY
             } else {
@@ -139,7 +149,35 @@ class ReminderSharingRepositoryImpl @Inject constructor(
             // Family with auto-delivery is released immediately; everyone
             // else waits as a PENDING invitation.
             val status = if (autoDeliver) ShareStatus.DELIVERED else ShareStatus.PENDING
-            shareDocument(owner, reminder.id, recipientUid).set(
+            // Share ids are deterministic, so re-sharing the same reminder to
+            // the same person targets the SAME document — and a full set()
+            // overwrote recipientReminderId back to null along with every
+            // acknowledgement field. The next sweep then saw an undelivered
+            // share and inserted a second local reminder on the recipient's
+            // device, while the acknowledgement trail for the first one was
+            // gone. A live share is therefore updated as content, exactly the
+            // way an owner edit is, rather than recreated.
+            val reference = shareDocument(owner, reminder.id, recipientUid)
+            val existing = runCatching { reference.get().await() }.getOrNull()
+            val existingShare = existing?.takeIf { it.exists() }?.toShare()
+            if (existingShare != null && existingShare.status !in RESHAREABLE_STATUSES) {
+                reference.set(
+                    mapOf(
+                        "title" to reminder.title,
+                        "scheduleSummary" to scheduleSummary,
+                        "payload" to payload,
+                        "payloadVersion" to existingShare.payloadVersion + 1,
+                        "contentUpdatedAt" to reminder.updatedAt.toEpochMilli(),
+                        "ownership" to ownership.name,
+                        "updateRequested" to !autoDeliver,
+                        "lastSyncAt" to FieldValue.serverTimestamp(),
+                    ),
+                    SetOptions.merge(),
+                ).await()
+                logger.i(TAG, "Re-share of ${reference.id} applied as a content update")
+                return@forEach
+            }
+            reference.set(
                 mapOf(
                     "reminderId" to reminder.id,
                     "ownerUid" to owner,
@@ -236,6 +274,16 @@ class ReminderSharingRepositoryImpl @Inject constructor(
     }
 
     override suspend fun declineShare(shareId: String) = runShareOp {
+        // Only a share still awaiting an answer can be declined. A stale
+        // "Reminder invitation" card in the Notification Centre could
+        // otherwise reject a share that had already been accepted and
+        // delivered - the owner's dashboard flipped to "declined" while the
+        // reminder sat scheduled and firing on the recipient's device, and no
+        // sweep ever reconciled the two.
+        val current = shareReference(shareId).get().await()
+        if (!current.exists() || current.getString("status") != ShareStatus.PENDING.name) {
+            throw FriendException(FriendError.ALREADY_PENDING)
+        }
         shareReference(shareId).set(
             mapOf(
                 "status" to ShareStatus.REJECTED.name,
@@ -289,32 +337,36 @@ class ReminderSharingRepositoryImpl @Inject constructor(
         )
     }
 
-    override suspend fun deleteOwnedReminder(reminderId: Long) = runShareOp {
+    override suspend fun cancelSharesFor(reminderId: Long): Boolean = runShareOp {
         val owner = auth.currentUser?.uid ?: throw FriendException(FriendError.UNKNOWN)
-        val shares = firestore.collection(FirestoreSchema.REMINDER_SHARES)
+        val live = firestore.collection(FirestoreSchema.REMINDER_SHARES)
             .whereEqualTo("ownerUid", owner)
             .whereEqualTo("reminderId", reminderId)
             .get()
             .await()
             .documents
             .map { it.toShare() }
-        shares
             .filter { it.status != ShareStatus.CANCELLED && it.status != ShareStatus.REJECTED }
-            .forEach { share ->
-                shareReference(share.id).set(
-                    mapOf(
-                        "status" to ShareStatus.CANCELLED.name,
-                        "respondedAt" to FieldValue.serverTimestamp(),
-                        "lastSyncAt" to FieldValue.serverTimestamp(),
-                    ),
-                    SetOptions.merge(),
-                ).await()
-                notifyCancelled(share.id, share.title)
-            }
+        live.forEach { share ->
+            shareReference(share.id).set(
+                mapOf(
+                    "status" to ShareStatus.CANCELLED.name,
+                    "respondedAt" to FieldValue.serverTimestamp(),
+                    "lastSyncAt" to FieldValue.serverTimestamp(),
+                ),
+                SetOptions.merge(),
+            ).await()
+            notifyCancelled(share.id, share.title)
+        }
+        live.isNotEmpty()
+    }
+
+    override suspend fun deleteOwnedReminder(reminderId: Long) = runShareOp {
+        val hadShares = cancelSharesFor(reminderId)
         if (reminderRepository.getReminder(reminderId) != null) {
             coordinator.delete(reminderId)
         }
-        logger.i(TAG, "Owned reminder $reminderId deleted; ${shares.size} share(s) cancelled")
+        logger.i(TAG, "Owned reminder $reminderId deleted (shares cancelled: $hadShares)")
     }
 
     override suspend fun acceptShareUpdate(share: ReminderShare) = runShareOp {
@@ -335,7 +387,17 @@ class ReminderSharingRepositoryImpl @Inject constructor(
         Unit
     }
 
-    override suspend fun syncIncomingShares() {
+    /**
+     * Serialises both sweeps. They are triggered by a debounced combine of the
+     * shares flow and Room invalidation, and each sweep's own writes retrigger
+     * that combine — so without this two sweeps could overlap and both act on
+     * the same share. The per-share claim transaction in [deliverLocally]
+     * covers the cross-device case; this covers the far more common
+     * same-process one, and costs nothing when uncontended.
+     */
+    private val syncMutex = Mutex()
+
+    override suspend fun syncIncomingShares() = syncMutex.withLock {
         val me = auth.currentUser?.uid ?: return
         val shares = runCatching {
             firestore.collection(FirestoreSchema.REMINDER_SHARES)
@@ -355,6 +417,16 @@ class ReminderSharingRepositoryImpl @Inject constructor(
         when {
             // Family auto-delivery: store and schedule without approval.
             share.status == ShareStatus.DELIVERED -> deliverLocally(share)
+
+            // Recovery for a share stranded in ACCEPTED. acceptShare writes
+            // ACCEPTED first so the sender's dashboard updates even if the
+            // download is slow, then delivers — so a crash, a kill or a lost
+            // connection in between left the share accepted with no local
+            // reminder, and nothing ever retried: no sweep branch matched
+            // ACCEPTED, and acceptShare refuses to run twice. deliverLocally
+            // is idempotent, so running it here on every sweep is safe.
+            share.status == ShareStatus.ACCEPTED && share.recipientReminderId == null ->
+                deliverLocally(share)
 
             // Owner revoked an assignment: recipients-only copies belong to
             // the owner, so they are removed from this device. Me+others
@@ -540,7 +612,7 @@ class ReminderSharingRepositoryImpl @Inject constructor(
         logger.i(TAG, "Content update v${share.payloadVersion} applied for ${share.id}")
     }
 
-    override suspend fun syncOwnedShares() {
+    override suspend fun syncOwnedShares() = syncMutex.withLock {
         val me = auth.currentUser?.uid ?: return
         val shares = runCatching {
             firestore.collection(FirestoreSchema.REMINDER_SHARES)
@@ -617,12 +689,50 @@ class ReminderSharingRepositoryImpl @Inject constructor(
             logger.w(TAG, "Share ${share.id} has no payload — cannot deliver")
             return
         }
+        // Claim the share BEFORE scheduling anything.
+        //
+        // The in-memory `recipientReminderId` check above is not enough on its
+        // own: two sweeps (or two devices on the same account) could both read
+        // a share with a null id and both go on to insert a local reminder and
+        // arm an alarm, leaving the user with the same reminder twice and no
+        // way to tell which copy the owner is tracking. The transaction makes
+        // the claim atomic — exactly one caller sees the null and wins.
+        //
+        // A placeholder id is written first and replaced with the real local
+        // id once Room has inserted the row. A crash in between leaves the
+        // share claimed with CLAIM_PENDING, which the sweep repairs rather
+        // than re-delivering.
+        val reference = shareReference(share.id)
+        val claimed = runCatching {
+            firestore.runTransaction { transaction ->
+                val current = transaction.get(reference)
+                val existing = current.getLong("recipientReminderId")
+                if (existing != null && existing != CLAIM_PENDING) return@runTransaction false
+                transaction.set(
+                    reference,
+                    mapOf(
+                        "recipientReminderId" to CLAIM_PENDING,
+                        "lastSyncAt" to FieldValue.serverTimestamp(),
+                    ),
+                    SetOptions.merge(),
+                )
+                true
+            }.await()
+        }.getOrElse {
+            logger.w(TAG, "Could not claim share ${share.id}", it)
+            false
+        }
+        if (!claimed) {
+            logger.d(TAG, "Share ${share.id} already claimed by another sweep — skipping")
+            return
+        }
+
         val backup = json.decodeFromString(BackupReminder.serializer(), share.payload)
         // toEntity() resets the id, so this always inserts a NEW local
         // reminder; the sender's copy is untouched.
         val reminder = backup.toEntity().toDomain()
         val localId = coordinator.saveAndSchedule(reminder)
-        shareReference(share.id).set(
+        reference.set(
             mapOf(
                 "status" to ShareStatus.SCHEDULED.name,
                 "recipientReminderId" to localId,
@@ -641,6 +751,32 @@ class ReminderSharingRepositoryImpl @Inject constructor(
      * leaking the owner's lastTriggeredAt would trip the recipient's
      * fire-mirroring into reporting a phantom trigger.
      */
+    /**
+     * Whether [recipientUid] has agreed to receive reminders from [ownerUid]
+     * without approving each one.
+     *
+     * The flag lives on the recipient's own family edge, which the security
+     * rules let a fellow family member read. Any failure - the edge is gone,
+     * the read is denied, the device is offline - is treated as "no", so the
+     * share falls back to a PENDING invitation. Requiring approval is always
+     * the safe direction.
+     */
+    private suspend fun recipientAllowsAutoDelivery(
+        recipientUid: String,
+        ownerUid: String,
+    ): Boolean = runCatching {
+        firestore.collection(FirestoreSchema.USERS).document(recipientUid)
+            .collection(FirestoreSchema.FAMILY).document(ownerUid)
+            .get()
+            .await()
+            .takeIf { it.exists() }
+            ?.let { (it.get("permissions") as? Map<*, *>)?.get("autoReceiveReminders") == true }
+            ?: false
+    }.getOrElse {
+        logger.d(TAG, "Auto-delivery permission unreadable for $recipientUid: ${it.message}")
+        false
+    }
+
     private fun encodePayload(reminder: Reminder): String = json.encodeToString(
         BackupReminder.serializer(),
         reminder.copy(
@@ -713,7 +849,12 @@ class ReminderSharingRepositoryImpl @Inject constructor(
             appliedVersion = getLong("appliedVersion") ?: payloadVersion,
             updateRequested = getBoolean("updateRequested") == true,
             contentUpdatedAt = getLong("contentUpdatedAt") ?: 0L,
-            recipientReminderId = getLong("recipientReminderId"),
+            // CLAIM_PENDING means a delivery was claimed but the process died
+            // before the local reminder existed. Reading it as "not delivered"
+            // is what lets the next sweep repair it: the claim transaction
+            // accepts a re-claim of CLAIM_PENDING, but never of a real id.
+            recipientReminderId = getLong("recipientReminderId")
+                ?.takeIf { it != CLAIM_PENDING },
             lastFiredAt = getLong("lastFiredAtMillis")?.let(Instant::ofEpochMilli),
             ackMethod = com.alertnotes.domain.model.AcknowledgeMethod.entries
                 .firstOrNull { it.name == getString("ackMethod") },
@@ -771,5 +912,23 @@ class ReminderSharingRepositoryImpl @Inject constructor(
 
     private companion object {
         const val TAG = "ReminderSharing"
+
+        /**
+         * Sentinel written into `recipientReminderId` to claim a delivery
+         * before the local reminder exists. Never a valid Room id (those are
+         * positive autoincrement Longs), so it cannot collide.
+         */
+        const val CLAIM_PENDING = -1L
+
+        /**
+         * Statuses a share may be recreated from. Everything else is a live
+         * share whose delivery guard and acknowledgement trail must survive a
+         * re-share; those are updated in place instead.
+         */
+        val RESHAREABLE_STATUSES = setOf(
+            ShareStatus.CANCELLED,
+            ShareStatus.REJECTED,
+            ShareStatus.COMPLETED,
+        )
     }
 }

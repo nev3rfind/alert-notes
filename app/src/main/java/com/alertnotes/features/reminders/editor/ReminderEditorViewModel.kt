@@ -107,6 +107,7 @@ class ReminderEditorViewModel @AssistedInject constructor(
     private val coordinator: ReminderSchedulingCoordinator,
     private val settingsRepository: com.alertnotes.domain.repository.SettingsRepository,
     private val templateRepository: com.alertnotes.domain.repository.TemplateRepository,
+    private val sharingRepository: com.alertnotes.domain.repository.ReminderSharingRepository,
     private val timeProvider: TimeProvider,
     private val logger: AppLogger,
 ) : ViewModel() {
@@ -308,11 +309,34 @@ class ReminderEditorViewModel @AssistedInject constructor(
         if (state.isNew) return
         viewModelScope.launch {
             try {
-                coordinator.delete(state.draft.id)
+                // Deleting a reminder that was shared has to cancel its shares
+                // too, otherwise the recipients keep a scheduled copy of a
+                // reminder the owner believes is gone - and the owner's
+                // dashboard keeps tracking a reminder that no longer exists.
+                // deleteOwnedReminder cancels every live share, tells the
+                // recipients, and then deletes the local reminder.
+                deleteWithShares(state.draft.id)
                 _isFinished.value = true
             } catch (throwable: Throwable) {
                 logger.e(TAG, "Failed to delete reminder ${state.draft.id}", throwable)
             }
+        }
+    }
+
+    /** Online: cancel shares then delete. Offline: there are no shares. */
+    private suspend fun deleteWithShares(reminderId: Long) {
+        val online = runCatching {
+            settingsRepository.preferences.first().appMode ==
+                com.alertnotes.domain.model.AppMode.ONLINE
+        }.getOrDefault(false)
+        if (online) {
+            runCatching { sharingRepository.deleteOwnedReminder(reminderId) }
+                .getOrElse {
+                    logger.w(TAG, "Share cancellation failed; deleting locally anyway", it)
+                    coordinator.delete(reminderId)
+                }
+        } else {
+            coordinator.delete(reminderId)
         }
     }
 
