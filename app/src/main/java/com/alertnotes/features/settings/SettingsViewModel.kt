@@ -41,6 +41,7 @@ sealed interface CloudUploadUiState {
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
+    private val localeManager: com.alertnotes.core.util.AppLocaleManager,
     private val permissionsManager: PermissionsManager,
     private val coordinator: ReminderSchedulingCoordinator,
     private val timeProvider: TimeProvider,
@@ -70,6 +71,17 @@ class SettingsViewModel @Inject constructor(
     fun setThemeMode(themeMode: ThemeMode) {
         viewModelScope.launch { settingsRepository.setThemeMode(themeMode) }
     }
+
+    /** The language in force right now, read from wherever it is stored. */
+    val currentLanguage: com.alertnotes.core.util.AppLanguage
+        get() = localeManager.current
+
+    /**
+     * Applies [language]. Returns true when the caller must recreate the
+     * activity itself — API 33+ leaves that to the platform.
+     */
+    fun setLanguage(language: com.alertnotes.core.util.AppLanguage): Boolean =
+        localeManager.apply(language)
 
     fun setUseDynamicColor(enabled: Boolean) {
         viewModelScope.launch { settingsRepository.setUseDynamicColor(enabled) }

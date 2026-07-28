@@ -27,6 +27,7 @@ import com.alertnotes.features.reminders.editor.ReminderEditorScreen
 import com.alertnotes.features.friends.FamilyScreen
 import com.alertnotes.features.friends.FriendsScreen
 import com.alertnotes.features.friends.PublicProfileScreen
+import com.alertnotes.features.settings.PrivacyScreen
 import com.alertnotes.features.settings.ReliabilityScreen
 import com.alertnotes.features.settings.SettingsScreen
 import com.alertnotes.features.chat.ChatScreen
@@ -172,10 +173,14 @@ fun AlertNotesNavHost(
                 onOpenAbout = { navController.navigate(AboutRoute) },
                 onOpenHistory = { navController.navigate(HistoryRoute) },
                 onOpenReliability = { navController.navigate(ReliabilityRoute) },
+                onOpenPrivacy = { navController.navigate(PrivacyRoute) },
             )
         }
         composable<ReliabilityRoute> {
             ReliabilityScreen(onNavigateBack = navController::navigateUp)
+        }
+        composable<PrivacyRoute> {
+            PrivacyScreen(onNavigateBack = navController::navigateUp)
         }
         composable<ShareReminderRoute> { entry ->
             val route = entry.toRoute<ShareReminderRoute>()

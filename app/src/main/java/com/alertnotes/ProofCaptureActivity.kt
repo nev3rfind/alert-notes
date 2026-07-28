@@ -55,6 +55,7 @@ import com.alertnotes.core.ui.components.SecondaryButton
 import com.alertnotes.core.ui.theme.AlertNotesTheme
 import com.alertnotes.core.ui.theme.spacing
 import com.alertnotes.core.util.AckProofStore
+import com.alertnotes.core.util.AppLocaleManager
 import com.alertnotes.domain.model.AcknowledgeMethod
 import com.alertnotes.services.AcknowledgementSession
 import com.google.android.gms.location.LocationCallback
@@ -93,6 +94,13 @@ import kotlinx.coroutines.withTimeoutOrNull
  */
 @AndroidEntryPoint
 class ProofCaptureActivity : FragmentActivity() {
+
+    // The selected app language must be in place before a single resource is
+    // resolved, which is what attachBaseContext guarantees. No-op on API 33+,
+    // where the platform has already applied the per-app locale.
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(AppLocaleManager.wrap(newBase))
+    }
 
     private val locationViewModel: LocationProofViewModel by viewModels()
 

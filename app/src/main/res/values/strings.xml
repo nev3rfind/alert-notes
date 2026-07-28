@@ -1019,4 +1019,60 @@
     <string name="profile_avatar_editor_hint">Pinch to zoom, drag to reposition</string>
     <string name="profile_avatar_rotate">Rotate</string>
     <string name="profile_avatar_use_photo">Use photo</string>
+
+    <!-- Privacy &amp; who can reach you -->
+    <string name="privacy_title">Privacy</string>
+    <string name="privacy_row_title">Privacy &amp; who can reach you</string>
+    <string name="privacy_row_subtitle">Choose who may add you, message you, and see your activity</string>
+    <string name="privacy_offline_notice">Privacy controls apply to online mode. In offline mode nothing about you leaves this device, so there is nothing to configure.</string>
+    <string name="privacy_section_reach">Who can reach you</string>
+    <string name="privacy_section_visibility">What others can see</string>
+    <string name="privacy_saving">Saving…</string>
+    <string name="privacy_saved">Privacy settings updated</string>
+    <string name="privacy_save_failed">Could not save your privacy settings. Check your connection and try again.</string>
+
+    <string name="privacy_control_friend_requests">Friend requests</string>
+    <string name="privacy_control_friend_requests_summary">Who may send you a friend request</string>
+    <string name="privacy_control_family_invitations">Family invitations</string>
+    <string name="privacy_control_family_invitations_summary">Who may invite you into their family circle. Only friends can ever invite you.</string>
+    <string name="privacy_control_reminder_sharing">Reminder sharing</string>
+    <string name="privacy_control_reminder_sharing_summary">Who may send or assign you a reminder</string>
+    <string name="privacy_control_message_requests">Messages</string>
+    <string name="privacy_control_message_requests_summary">Who may start a conversation with you</string>
+    <string name="privacy_control_profile_visibility">Profile visibility</string>
+    <string name="privacy_control_profile_visibility_summary">Who may open your profile. Anything narrower than Everyone also removes you from search.</string>
+    <string name="privacy_control_online_status">Online status</string>
+    <string name="privacy_control_online_status_summary">Who sees when you are using Alert Notes</string>
+    <string name="privacy_control_last_seen">Last seen</string>
+    <string name="privacy_control_last_seen_summary">Who sees when you were last active</string>
+    <string name="privacy_control_analytics_visibility">Reminder statistics</string>
+    <string name="privacy_control_analytics_visibility_summary">Who sees your reminder counters on your public profile</string>
+
+    <string name="privacy_audience_everyone">Everyone</string>
+    <string name="privacy_audience_friends_of_friends">Friends of friends</string>
+    <string name="privacy_audience_friends_only">Friends only</string>
+    <string name="privacy_audience_family_only">Family only</string>
+    <string name="privacy_audience_nobody">Nobody</string>
+
+    <string name="privacy_audience_everyone_hint">Any Alert Notes user</string>
+    <string name="privacy_audience_friends_of_friends_hint">People who share at least one friend with you</string>
+    <string name="privacy_audience_friends_only_hint">Only people you have accepted as friends</string>
+    <string name="privacy_audience_family_only_hint">Only members of your family circle</string>
+    <string name="privacy_audience_nobody_hint">No one, including your friends and family</string>
+
+    <string name="privacy_not_discoverable_warning">You will not appear in user search. Friends can still find you by exact @username.</string>
+    <string name="friends_error_privacy">This person\'s privacy settings do not allow that right now.</string>
+
+    <!-- Language -->
+    <string name="settings_language">Language</string>
+    <string name="settings_language_system">System default</string>
+    <string name="settings_language_english">English</string>
+    <string name="settings_language_lithuanian">Lietuvių</string>
+
+    <!-- Account deletion -->
+    <string name="account_delete_title">Delete account</string>
+    <string name="account_delete_subtitle">Permanently remove your account and everything stored in the cloud</string>
+    <string name="account_delete_confirm_title">Delete your account?</string>
+    <string name="account_delete_confirm_message">This permanently deletes your profile, username, friends, family circle, shared reminders, conversations and photos. It cannot be undone.\n\nThe reminders on this device are kept — Alert Notes simply returns to offline mode.\n\nEnter your password to confirm.</string>
+    <string name="account_delete_confirm_action">Delete forever</string>
 </resources>

@@ -21,6 +21,7 @@ import kotlinx.coroutines.delay
 import com.alertnotes.core.ui.components.LocalSecondTicker
 import com.alertnotes.core.ui.theme.AlertNotesTheme
 import com.alertnotes.core.util.SecondTicker
+import com.alertnotes.core.util.AppLocaleManager
 import com.alertnotes.domain.model.ThemeMode
 import com.alertnotes.features.alerts.AlertPresenter
 import com.alertnotes.features.alerts.ReminderAlertHost
@@ -36,6 +37,13 @@ import javax.inject.Inject
  */
 @AndroidEntryPoint
 class AlertActivity : FragmentActivity() {
+
+    // The selected app language must be in place before a single resource is
+    // resolved, which is what attachBaseContext guarantees. No-op on API 33+,
+    // where the platform has already applied the per-app locale.
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(AppLocaleManager.wrap(newBase))
+    }
 
     @Inject
     lateinit var presenter: AlertPresenter

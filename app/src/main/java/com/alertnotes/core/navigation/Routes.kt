@@ -78,6 +78,10 @@ data object HistoryRoute
 @Serializable
 data object ReliabilityRoute
 
+/** Privacy & who can reach you. */
+@Serializable
+data object PrivacyRoute
+
 /**
  * Full-screen reminder editor; [reminderId] 0 (= Reminder.NEW_ID) creates.
  * [initialEpochDay] pre-fills a new reminder's date (-1 = none) — used by
