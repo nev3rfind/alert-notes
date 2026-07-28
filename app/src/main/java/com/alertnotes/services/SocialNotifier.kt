@@ -44,8 +44,14 @@ class SocialNotifier @Inject constructor(
             ).apply {
                 description = context.getString(R.string.channel_chat_description)
                 setSound(
+                    // The URI must stay NAME-based (see above), but a bare
+                    // string literal is invisible to the resource shrinker,
+                    // which dropped message_receive.mp3 from release builds and
+                    // left this channel silent. Deriving the name from the
+                    // R.raw id keeps the URI stable AND the reference visible.
                     android.net.Uri.parse(
-                        "android.resource://${context.packageName}/raw/message_receive",
+                        "android.resource://${context.packageName}/raw/" +
+                            context.resources.getResourceEntryName(R.raw.message_receive),
                     ),
                     android.media.AudioAttributes.Builder()
                         .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION)

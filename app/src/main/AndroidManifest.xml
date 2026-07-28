@@ -41,6 +41,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:enableOnBackInvokedCallback="true"
+        android:localeConfig="@xml/locales_config"
         android:theme="@style/Theme.AlertNotes">
 
         <!-- The analytics SDK ships only to verify the Firebase connection.
@@ -117,9 +118,17 @@
             android:name=".services.AlertActionReceiver"
             android:exported="false" />
 
+        <!-- exported="true" is REQUIRED, not optional, on the three receivers
+             below: their broadcasts originate in system_server, and a
+             non-exported receiver rejects any sender outside its own uid. With
+             exported="false" the boot sweep never runs and alarms stay lost
+             until the user next opens the app. Exporting costs nothing here —
+             BOOT_COMPLETED, MY_PACKAGE_REPLACED, TIME_SET, TIMEZONE_CHANGED,
+             DATE_CHANGED and APPWIDGET_UPDATE are all protected broadcasts, so
+             the platform refuses to let any other app send them. -->
         <receiver
             android:name=".services.BootCompletedReceiver"
-            android:exported="false">
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
@@ -128,7 +137,7 @@
 
         <receiver
             android:name=".services.TimeChangeReceiver"
-            android:exported="false">
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.TIME_SET" />
                 <action android:name="android.intent.action.TIMEZONE_CHANGED" />
@@ -138,7 +147,7 @@
 
         <receiver
             android:name=".widgets.AlertNotesWidgetReceiver"
-            android:exported="false"
+            android:exported="true"
             android:label="@string/widget_description">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
