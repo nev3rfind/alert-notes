@@ -44,7 +44,9 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.tasks.await
 
 /**
@@ -63,14 +65,30 @@ class FriendRepositoryImpl @Inject constructor(
     private val firestore: FirebaseFirestore,
     private val identity: OwnIdentityCache,
     private val notificationCentre: com.alertnotes.domain.repository.NotificationCentreRepository,
+    private val profileCache: PublicProfileCache,
+    @param:com.alertnotes.di.ApplicationScope private val scope: kotlinx.coroutines.CoroutineScope,
     private val logger: AppLogger,
 ) : FriendRepository {
+
+    /**
+     * One Firestore listener per flow, however many screens collect it.
+     *
+     * These flows are cold, so every collector used to open its OWN snapshot
+     * listener - and several screens collect the same flow simultaneously.
+     * replay = 1 also means a screen re-entering finds the last value at once
+     * instead of showing a skeleton while a fresh listener warms up.
+     * WhileSubscribed still closes the listener shortly after the last
+     * collector leaves, so a backgrounded app holds none open.
+     */
+    private fun <T> Flow<T>.shared(): Flow<T> =
+        shareIn(scope, SharingStarted.WhileSubscribed(SHARE_TIMEOUT_MILLIS), replay = 1)
 
     @OptIn(ExperimentalCoroutinesApi::class)
     override val friends: Flow<List<FriendUser>> = authRepository.authState
         .flatMapLatest { user ->
             if (user == null) flowOf(emptyList()) else friendEdges(user.uid)
         }
+        .shared()
 
     @OptIn(ExperimentalCoroutinesApi::class)
     override val incomingRequests: Flow<List<FriendRequestWithProfile>> =
@@ -293,6 +311,7 @@ class FriendRepositoryImpl @Inject constructor(
         .flatMapLatest { user ->
             if (user == null) flowOf(emptyList()) else familyEdges(user.uid)
         }
+        .shared()
 
     @OptIn(ExperimentalCoroutinesApi::class)
     override val incomingFamilyInvitations: Flow<List<FamilyInvitationWithProfile>> =
@@ -443,7 +462,7 @@ class FriendRepositoryImpl @Inject constructor(
     override val blockedUsers: Flow<List<FriendUser>> =
         authRepository.authState.flatMapLatest { user ->
             if (user == null) flowOf(emptyList()) else blockedEdges(user.uid)
-        }
+        }.shared()
 
     override suspend fun blockUser(uid: String) = runFriendOp {
         val me = requireUid()
@@ -722,10 +741,8 @@ class FriendRepositoryImpl @Inject constructor(
     }
 
     /** One-shot profile fetch; deleted accounts simply drop out of lists. */
-    private suspend fun publicProfileOf(uid: String): PublicProfile? = runCatching {
-        publicDocument(uid).get().await().takeIf { it.exists() }
-            ?.toPublicProfile(viewerRelation(uid))
-    }.getOrNull()
+    private suspend fun publicProfileOf(uid: String): PublicProfile? =
+        profileCache.get(uid, viewerRelation(uid))
 
     /**
      * How the signed-in user is related to [uid] — the input the profile
@@ -896,6 +913,9 @@ class FriendRepositoryImpl @Inject constructor(
          * beyond this the request is simply reported as not permitted.
          */
         const val MUTUAL_FRIEND_SCAN_LIMIT = 40L
+
+        /** Grace period before an unsubscribed listener is torn down. */
+        const val SHARE_TIMEOUT_MILLIS = 5_000L
         val REQUEST_TTL: Duration = Duration.ofDays(30)
         val FRIEND_COUNT_UP = mapOf("friendCount" to FieldValue.increment(1))
         val FRIEND_COUNT_DOWN = mapOf("friendCount" to FieldValue.increment(-1))

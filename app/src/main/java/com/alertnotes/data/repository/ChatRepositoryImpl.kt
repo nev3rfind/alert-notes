@@ -54,6 +54,7 @@ class ChatRepositoryImpl @Inject constructor(
     private val identity: OwnIdentityCache,
     private val notificationCentre: com.alertnotes.domain.repository.NotificationCentreRepository,
     private val chatSessionTracker: com.alertnotes.services.ChatSessionTracker,
+    private val profileCache: PublicProfileCache,
     private val logger: AppLogger,
 ) : ChatRepository {
 
@@ -283,12 +284,8 @@ class ChatRepositoryImpl @Inject constructor(
         )
     }
 
-    private suspend fun publicProfileOf(uid: String): PublicProfile? = runCatching {
-        firestore.collection(FirestoreSchema.USERS).document(uid)
-            .collection(FirestoreSchema.SECTION_PUBLIC).document(FirestoreSchema.SECTION_DOC)
-            .get().await().takeIf { it.exists() }
-            ?.toPublicProfile(friendRepository.viewerRelation(uid))
-    }.getOrNull()
+    private suspend fun publicProfileOf(uid: String): PublicProfile? =
+        profileCache.get(uid, friendRepository.viewerRelation(uid))
 
     private fun DocumentSnapshot.toMessage(): ChatMessage = ChatMessage(
         id = id,

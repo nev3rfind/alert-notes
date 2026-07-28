@@ -26,6 +26,8 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
@@ -93,6 +95,7 @@ class HomeViewModel @Inject constructor(
     chatRepository: com.alertnotes.domain.repository.ChatRepository,
     notificationCentre: com.alertnotes.domain.repository.NotificationCentreRepository,
     projector: OccurrenceProjector,
+    private val secondTicker: com.alertnotes.core.util.SecondTicker,
     timeProvider: TimeProvider,
     logger: AppLogger,
 ) : ViewModel() {
@@ -182,9 +185,24 @@ class HomeViewModel @Inject constructor(
         }
         .flowOn(Dispatchers.Default)
 
+    /**
+     * "Due today" statistics, re-anchored when the day actually changes.
+     *
+     * The horizon used to be computed once, in this property's initialiser -
+     * so an app left open across midnight kept counting against yesterday's
+     * end-of-day forever, and resubscribing did not help because it re-collects
+     * the same Flow object with the same baked-in constant. Deriving the day
+     * boundary from the ticker and de-duplicating means the query is rebuilt
+     * exactly once per midnight, not once per second.
+     */
+    private val statsForToday = secondTicker.now
+        .map { endOfToday(it) }
+        .distinctUntilChanged()
+        .flatMapLatest { horizon -> reminderRepository.observeStats(dueHorizon = horizon) }
+
     val uiState: StateFlow<HomeUiState> = combine(
         combine(
-            reminderRepository.observeStats(dueHorizon = endOfToday(timeProvider.now())),
+            statsForToday,
             queuePanel,
             reminderRepository.observeUpcoming(DASHBOARD_PREVIEW_COUNT),
             reminderRepository.observeRecentlyUpdated(DASHBOARD_PREVIEW_COUNT),

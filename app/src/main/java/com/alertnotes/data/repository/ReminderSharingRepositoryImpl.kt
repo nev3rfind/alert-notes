@@ -44,7 +44,9 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -84,8 +86,19 @@ class ReminderSharingRepositoryImpl @Inject constructor(
     private val chatRepository: ChatRepository,
     private val identity: OwnIdentityCache,
     private val notificationCentre: com.alertnotes.domain.repository.NotificationCentreRepository,
+    private val profileCache: PublicProfileCache,
+    @param:com.alertnotes.di.ApplicationScope private val scope: kotlinx.coroutines.CoroutineScope,
     private val logger: AppLogger,
 ) : ReminderSharingRepository {
+
+    /**
+     * One listener per flow. The home dashboard alone collects each share
+     * flow twice (once for the pulse tiles, once for the cards), and the
+     * shared-reminders screen and chat add more - each of which used to open
+     * its own Firestore listener over the same query.
+     */
+    private fun <T> Flow<T>.shared(): Flow<T> =
+        shareIn(scope, SharingStarted.WhileSubscribed(SHARE_TIMEOUT_MILLIS), replay = 1)
 
     /** Chat context is best-effort — sharing never fails over a message. */
     private suspend fun narrate(
@@ -109,13 +122,13 @@ class ReminderSharingRepositoryImpl @Inject constructor(
     override val outgoingShares: Flow<List<ReminderShareWithProfile>> =
         authRepository.authState.flatMapLatest { user ->
             if (user == null) flowOf(emptyList()) else shares("ownerUid", user.uid) { it.recipientUid }
-        }
+        }.shared()
 
     @OptIn(ExperimentalCoroutinesApi::class)
     override val incomingShares: Flow<List<ReminderShareWithProfile>> =
         authRepository.authState.flatMapLatest { user ->
             if (user == null) flowOf(emptyList()) else shares("recipientUid", user.uid) { it.ownerUid }
-        }
+        }.shared()
 
     override suspend fun shareReminder(
         reminder: Reminder,
@@ -398,15 +411,14 @@ class ReminderSharingRepositoryImpl @Inject constructor(
     private val syncMutex = Mutex()
 
     override suspend fun syncIncomingShares() = syncMutex.withLock {
-        val me = auth.currentUser?.uid ?: return
-        val shares = runCatching {
-            firestore.collection(FirestoreSchema.REMINDER_SHARES)
-                .whereEqualTo("recipientUid", me)
-                .get()
-                .await()
-                .documents
-                .map { it.toShare() }
-        }.getOrDefault(emptyList())
+        auth.currentUser?.uid ?: return
+        // Reads the already-open listener's latest value rather than issuing a
+        // fresh collection get(). The sweep is TRIGGERED by this very flow, so
+        // the data is in hand the moment it runs - the get() was re-reading
+        // every incoming share from the server on every trigger, and the
+        // sweep's own writes retrigger it.
+        val shares = runCatching { incomingShares.first().map { it.share } }
+            .getOrDefault(emptyList())
         shares.forEach { share ->
             runCatching { syncIncomingShare(share) }
                 .onFailure { logger.w(TAG, "Incoming sync failed for ${share.id}", it) }
@@ -613,15 +625,10 @@ class ReminderSharingRepositoryImpl @Inject constructor(
     }
 
     override suspend fun syncOwnedShares() = syncMutex.withLock {
-        val me = auth.currentUser?.uid ?: return
-        val shares = runCatching {
-            firestore.collection(FirestoreSchema.REMINDER_SHARES)
-                .whereEqualTo("ownerUid", me)
-                .get()
-                .await()
-                .documents
-                .map { it.toShare() }
-        }.getOrDefault(emptyList())
+        auth.currentUser?.uid ?: return
+        // Same as syncIncomingShares: the listener already holds this data.
+        val shares = runCatching { outgoingShares.first().map { it.share } }
+            .getOrDefault(emptyList())
         val live = shares.filter {
             it.status != ShareStatus.CANCELLED && it.status != ShareStatus.REJECTED
         }
@@ -818,12 +825,8 @@ class ReminderSharingRepositoryImpl @Inject constructor(
             }
     }
 
-    private suspend fun publicProfileOf(uid: String): PublicProfile? = runCatching {
-        firestore.collection(FirestoreSchema.USERS).document(uid)
-            .collection(FirestoreSchema.SECTION_PUBLIC).document(FirestoreSchema.SECTION_DOC)
-            .get().await().takeIf { it.exists() }
-            ?.toPublicProfile(friendRepository.viewerRelation(uid))
-    }.getOrNull()
+    private suspend fun publicProfileOf(uid: String): PublicProfile? =
+        profileCache.get(uid, friendRepository.viewerRelation(uid))
 
     private fun DocumentSnapshot.toShare(): ReminderShare {
         val payloadVersion = getLong("payloadVersion") ?: 1L
@@ -919,6 +922,9 @@ class ReminderSharingRepositoryImpl @Inject constructor(
          * positive autoincrement Longs), so it cannot collide.
          */
         const val CLAIM_PENDING = -1L
+
+        /** Grace period before an unsubscribed listener is torn down. */
+        const val SHARE_TIMEOUT_MILLIS = 5_000L
 
         /**
          * Statuses a share may be recreated from. Everything else is a live
