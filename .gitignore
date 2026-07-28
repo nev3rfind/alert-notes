@@ -14,3 +14,18 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Release signing material — never in source control.
+keystore.properties
+*.jks
+*.keystore
+
+# Node
+functions/node_modules
+firestore-tests/node_modules
+
+# Firebase emulator artifacts
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+*-debug.log

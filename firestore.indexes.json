@@ -1,0 +1,117 @@
+{
+  "//": [
+    "Alert Notes — Cloud Firestore index definitions.",
+    "",
+    "Every composite index here backs a query that exists in the app; a query",
+    "with more than one equality filter needs one, and Firestore refuses the",
+    "query outright without it. Single-field indexes are created automatically",
+    "and are not repeated here — except under fieldOverrides, where a query",
+    "scope other than the default is required.",
+    "",
+    "Deploy with: firebase deploy --only firestore:indexes"
+  ],
+
+  "indexes": [
+    {
+      "//": "FriendRepositoryImpl.pendingRequests — the outgoing-requests listener.",
+      "collectionGroup": "friendRequests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "fromUid", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "//": "FriendRepositoryImpl.pendingRequests — the incoming-requests listener.",
+      "collectionGroup": "friendRequests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "toUid", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "//": "FriendRepositoryImpl.pendingInvitations — outgoing family invitations.",
+      "collectionGroup": "familyInvitations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "fromUid", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "//": "FriendRepositoryImpl.pendingInvitations — incoming family invitations.",
+      "collectionGroup": "familyInvitations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "toUid", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "//": "ReminderSharingRepositoryImpl.sharesForReminder — every share of one reminder.",
+      "collectionGroup": "reminderShares",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "ownerUid", "order": "ASCENDING" },
+        { "fieldPath": "reminderId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "//": "ChatRepositoryImpl.markConversationRead — unread messages from one sender.",
+      "collectionGroup": "messages",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "senderUid", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "//": [
+        "FriendRepositoryImpl.search — display-name prefix search across every",
+        "user's public profile. `discoverable` is filtered first because the",
+        "security rules make it the precondition for listing a profile at all."
+      ],
+      "collectionGroup": "public",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "discoverable", "order": "ASCENDING" },
+        { "fieldPath": "displayName", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "//": "NotificationCentreRepositoryImpl.entriesOf — newest entries first, paged.",
+      "collectionGroup": "notifications",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "archived", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    }
+  ],
+
+  "fieldOverrides": [
+    {
+      "//": [
+        "Reminder payloads are a serialised JSON blob up to a few KB and are",
+        "never queried. Exempting the field removes two index entries per",
+        "share write and keeps documents under the 1 MiB index-entry ceiling."
+      ],
+      "collectionGroup": "reminderShares",
+      "fieldPath": "payload",
+      "indexes": []
+    },
+    {
+      "//": "Message bodies are never queried by value; only ordered by createdAt.",
+      "collectionGroup": "messages",
+      "fieldPath": "text",
+      "indexes": []
+    },
+    {
+      "//": "Notification bodies are display-only.",
+      "collectionGroup": "notifications",
+      "fieldPath": "body",
+      "indexes": []
+    }
+  ]
+}

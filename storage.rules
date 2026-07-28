@@ -1,0 +1,88 @@
+rules_version = '2';
+
+// =============================================================================
+// Alert Notes — Cloud Storage security rules
+// =============================================================================
+//
+// Two object families exist, both written only by the account they belong to:
+//
+//   avatars/{uid}.jpg                     profile picture
+//   ackProofs/{uid}/{shareId}_{ms}.jpg    photo proof of an acknowledgement
+//
+// Size and content-type ceilings are enforced here rather than in the client,
+// because the client is untrusted and Storage is billed by the byte.
+//
+// Note on download URLs: `getDownloadUrl()` mints a long-lived token that
+// grants read access to whoever holds the URL, independent of these rules.
+// Acknowledgement proof URLs are therefore only ever written into the share
+// document, which is itself readable by exactly the two parties involved.
+// =============================================================================
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function isJpeg() {
+      return request.resource.contentType == 'image/jpeg';
+    }
+
+    function underBytes(limit) {
+      return request.resource.size < limit;
+    }
+
+    // -----------------------------------------------------------------------
+    // avatars/{uid}.jpg — one object per account, overwritten on change.
+    // Readable by any signed-in user: avatars appear in search results, friend
+    // lists, chat headers and shared-reminder cards.
+    // -----------------------------------------------------------------------
+    match /avatars/{fileName} {
+      allow read: if signedIn();
+      allow write: if isSelf(fileName.split('\\.')[0])
+        && isJpeg()
+        && underBytes(2 * 1024 * 1024);
+      allow delete: if isSelf(fileName.split('\\.')[0]);
+    }
+
+    // -----------------------------------------------------------------------
+    // ackProofs/{uid}/{file} — camera proof attached to an acknowledgement.
+    // Written by the recipient who acknowledged; read by that recipient and by
+    // the owner of the share the proof belongs to (verified against Firestore,
+    // so a stolen path alone is not enough).
+    // -----------------------------------------------------------------------
+    match /ackProofs/{uid}/{fileName} {
+
+      /** `{ownerUid}_{reminderId}_{recipientUid}_{millis}.jpg` → share id. */
+      function shareIdOf() {
+        return fileName.split('_')[0] + '_'
+          + fileName.split('_')[1] + '_'
+          + fileName.split('_')[2];
+      }
+
+      function isShareOwner() {
+        return signedIn()
+          && firestore.get(/databases/(default)/documents/reminderShares/$(shareIdOf()))
+               .data.ownerUid == request.auth.uid;
+      }
+
+      allow read: if isSelf(uid) || isShareOwner();
+      allow write: if isSelf(uid)
+        && isJpeg()
+        && underBytes(8 * 1024 * 1024);
+      allow delete: if isSelf(uid);
+    }
+
+    // -----------------------------------------------------------------------
+    // Everything else is closed.
+    // -----------------------------------------------------------------------
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

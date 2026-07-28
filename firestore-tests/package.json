@@ -1,0 +1,14 @@
+{
+  "name": "alert-notes-firestore-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Security-rules tests for Alert Notes. Run against the Firestore emulator; no production project is ever touched.",
+  "type": "module",
+  "scripts": {
+    "test": "firebase emulators:exec --project alert-notes-test --only firestore \"node --test rules.test.js\""
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^4.0.1",
+    "firebase": "^11.0.0"
+  }
+}
