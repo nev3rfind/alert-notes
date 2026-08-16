@@ -22,8 +22,19 @@ android {
         applicationId = "com.alertnotes"
         minSdk = 26
         targetSdk = 36
-        versionCode = 10
-        versionName = "1.0.0"
+        // Closed Testing 1 for the Online Edition.
+        //
+        // versionCode is monotonic and never reused: 10 belonged to the
+        // offline edition, so this build takes 11. Play rejects a re-upload of
+        // an existing code, and a gap costs nothing.
+        //
+        // versionName is a minor bump because the Online Edition adds whole
+        // features (accounts, friends, family, chat, shared reminders and
+        // acknowledgement evidence) on top of the 1.0.0 offline release
+        // without breaking it. The -beta1 qualifier is what testers see, and
+        // it drops to a plain "1.1.0" when this promotes to production.
+        versionCode = 11
+        versionName = "1.1.0-beta1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
