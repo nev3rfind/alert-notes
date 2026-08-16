@@ -71,12 +71,31 @@ An honest list of what version 1.0.0 does not (or cannot) do, and why.
   scroll content behind the lock scrim, though not read it — the scrim is
   opaque.
 
+## Online Edition trade-offs
+
+- **Three privacy controls are enforced client-side, not by security
+  rules.** `onlineStatus`, `lastSeen` and `analyticsVisibility` describe
+  fields inside a profile document the viewer is already permitted to
+  read, so they are applied when the profile is mapped rather than by
+  Firestore. Choosing `NOBODY` additionally stops the value being written
+  at all, which is the only tier that is enforced end-to-end. A modified
+  client could therefore read a narrower audience's online status or
+  counters from a profile it may otherwise open. The five controls that
+  gate a *write* - friend requests, family invitations, reminder sharing,
+  message requests - and profile reads themselves are all enforced by
+  `firestore.rules` and covered by the rules test suite.
+- **Firebase App Check is not configured.** The backend cannot currently
+  distinguish the shipped app from any client holding the (necessarily
+  public) API key, so `firestore.rules` is the only barrier. The rules are
+  written to assume exactly that and deny by default, but App Check should
+  be added before a production launch.
+- Evidence uploads are best-effort while offline: the acknowledgement is
+  recorded locally and the image or signature uploads on reconnect.
+
 ## Not implemented (deliberate scope decisions)
 
-- No cloud sync, accounts, or multi-device support — the core privacy
-  promise.
 - No per-reminder custom sounds (the alarm channel uses the system alarm
   sound); no TTS announcements.
 - No wear-OS companion, no quick-settings tile.
-- Localization ships English-only in 1.0.0; all strings are externalized
-  and ready for translation.
+- Localization ships English and Lithuanian; all strings are externalized
+  and further languages need only a new `values-xx/strings.xml`.

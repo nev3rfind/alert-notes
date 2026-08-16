@@ -91,6 +91,22 @@ data class Reminder(
             title.contains(query, ignoreCase = true) ||
             description.contains(query, ignoreCase = true)
 
+    /**
+     * Whether this reminder may be dismissed straight from the notification
+     * shade, without ever showing the alert UI.
+     *
+     * Only reminders that ask for nothing qualify. Anything carrying a proof
+     * requirement — biometrics, a photo, a location fix, a signature, a
+     * checklist, or a dismiss-lock countdown — must be resolved on the alert
+     * surface where that requirement is actually enforced, otherwise the
+     * shade becomes a way to skip it.
+     */
+    fun allowsShadeDismissal(): Boolean =
+        !requiresBiometric &&
+            acknowledgement == AcknowledgementType.NONE &&
+            checklist.isEmpty() &&
+            dismissCountdown == null
+
     companion object {
         /** Room treats 0 as "not yet inserted" and generates a real id. */
         const val NEW_ID = 0L

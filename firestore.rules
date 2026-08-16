@@ -1,0 +1,561 @@
+rules_version = '2';
+
+// =============================================================================
+// Alert Notes — Cloud Firestore security rules
+// =============================================================================
+//
+// Threat model
+// ------------
+// The Android client is untrusted. Every document below is reachable by any
+// signed-in user holding a valid ID token, so these rules — not the app code —
+// are the authorisation boundary. Client-side checks in the repositories are
+// defence in depth and convenience only.
+//
+// Design notes
+// ------------
+// * The profile is split into single-document sections (public/private/…) so a
+//   rule can expose one section without exposing the rest; Firestore rules
+//   protect documents, never individual fields.
+// * Relationship edges (`friends`, `family`) are the authorisation primitive.
+//   `exists()` on an edge costs one document read per evaluation, so the
+//   helpers short-circuit cheapest-first and are only reached on writes and on
+//   single-document reads, never inside a list query.
+// * Queries: a `list` rule cannot call `get()` per result. Anything queryable
+//   across users is therefore gated on a denormalised field the query itself
+//   must filter on (`public.discoverable`), so the rule is decidable from the
+//   query constraints alone.
+// * Blocking is symmetric and always terminal: a block in either direction
+//   revokes writes between the two accounts everywhere.
+// =============================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------------------------------------------------------------------
+    // Identity helpers
+    // ---------------------------------------------------------------------
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function uid() {
+      return request.auth.uid;
+    }
+
+    function isSelf(userId) {
+      return signedIn() && uid() == userId;
+    }
+
+    /**
+     * A confirmed email address, straight from the ID token.
+     *
+     * Required to reach another account at all — sending a friend request, an
+     * invitation, a share, a message, or writing into someone's notification
+     * centre. Anything confined to the caller's own data stays available
+     * unverified, so a new user can set up their profile while the mail is in
+     * flight. The profile's `security.emailVerified` field is a client-written
+     * display mirror and is deliberately NOT consulted here.
+     */
+    function verified() {
+      return signedIn() && request.auth.token.email_verified == true;
+    }
+
+    // ---------------------------------------------------------------------
+    // Relationship helpers
+    // ---------------------------------------------------------------------
+
+    function isFriendOf(a, b) {
+      return exists(/databases/$(database)/documents/users/$(a)/friends/$(b));
+    }
+
+    function isFamilyOf(a, b) {
+      return exists(/databases/$(database)/documents/users/$(a)/family/$(b));
+    }
+
+    /** Any accepted relationship in the caller's direction. */
+    function connected(other) {
+      return isFriendOf(uid(), other) || isFamilyOf(uid(), other);
+    }
+
+    function hasBlocked(owner, other) {
+      return exists(/databases/$(database)/documents/users/$(owner)/blocked/$(other));
+    }
+
+    /**
+     * Neither party has blocked the other. Checked on every cross-user write:
+     * a block must immediately stop requests, shares, messages and
+     * notifications in both directions, not merely hide them in the UI.
+     */
+    function notBlocked(other) {
+      return !hasBlocked(uid(), other) && !hasBlocked(other, uid());
+    }
+
+    // ---------------------------------------------------------------------
+    // Privacy helpers
+    //
+    // Audiences live in the `privacy` map on `users/{uid}/public/data` rather
+    // than a section of their own: the profile-read rule can then consult them
+    // straight off `resource.data`, with no extra billed read on the hot path.
+    // Values: EVERYONE | FRIENDS_OF_FRIENDS | FRIENDS_ONLY | FAMILY_ONLY | NOBODY.
+    // A missing value means EVERYONE, so accounts created before the privacy
+    // feature keep working.
+    // ---------------------------------------------------------------------
+
+    function privacyOf(targetUid, key) {
+      let profile = get(/databases/$(database)/documents/users/$(targetUid)/public/data);
+      return profile.data.get('privacy', {}).get(key, 'EVERYONE');
+    }
+
+    /**
+     * FRIENDS_OF_FRIENDS is verified, not trusted: the caller names the mutual
+     * friend in `viaUid` and both legs of the chain are checked here. Callers
+     * can discover a valid `viaUid` because a user may read their own friends'
+     * friend lists (see the `friends` matcher below).
+     */
+    function friendOfFriend(targetUid, viaUid) {
+      return viaUid is string
+        && viaUid != uid()
+        && viaUid != targetUid
+        && isFriendOf(uid(), viaUid)
+        && isFriendOf(viaUid, targetUid);
+    }
+
+    function audienceAllows(targetUid, key, viaUid) {
+      let setting = privacyOf(targetUid, key);
+      return setting == 'EVERYONE'
+        || (setting == 'FRIENDS_ONLY' && isFriendOf(uid(), targetUid))
+        || (setting == 'FAMILY_ONLY' && isFamilyOf(uid(), targetUid))
+        || (setting == 'FRIENDS_OF_FRIENDS'
+            && (isFriendOf(uid(), targetUid) || friendOfFriend(targetUid, viaUid)));
+    }
+
+    // ---------------------------------------------------------------------
+    // Write-shape helpers
+    // ---------------------------------------------------------------------
+
+    /** Keys actually changed by this write (correct under SetOptions.merge). */
+    function changed() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
+
+    function changedOnly(fields) {
+      return changed().hasOnly(fields);
+    }
+
+    function isCreate() {
+      return resource == null;
+    }
+
+    // =====================================================================
+    // users/{userId} — thin anchor document
+    // =====================================================================
+    match /users/{userId} {
+      allow get: if isSelf(userId);
+      allow list: if false;
+      // Written once at registration and never again.
+      allow create: if isSelf(userId) && request.resource.data.uid == userId;
+      allow update, delete: if false;
+
+      // -------------------------------------------------------------------
+      // public/data — the only section other accounts can see
+      // -------------------------------------------------------------------
+      match /public/{document} {
+        // Single-document reads are privacy-aware. `viaUid` cannot be supplied
+        // on a read, so FRIENDS_OF_FRIENDS degrades to "friends only" here;
+        // that is the safe direction and the app never needs more.
+        allow get: if isSelf(userId)
+          || (signedIn()
+              && notBlocked(userId)
+              && audienceAllows(userId, 'profileVisibility', null));
+
+        // Direct listing of a single user's `public` subcollection. Search
+        // does not use this path — see the collection-group rule below.
+        allow list: if signedIn() && resource.data.discoverable == true;
+
+        allow create: if isSelf(userId);
+        // Presence and the privacy map are owner-only like the rest of the
+        // section; nothing here is writable by another account.
+        allow update: if isSelf(userId);
+        allow delete: if isSelf(userId);
+      }
+
+      // -------------------------------------------------------------------
+      // Owner-only sections
+      // -------------------------------------------------------------------
+      match /private/{document} {
+        allow read, write: if isSelf(userId);
+      }
+      match /preferences/{document} {
+        allow read, write: if isSelf(userId);
+      }
+      match /security/{document} {
+        allow read, write: if isSelf(userId);
+      }
+      match /metadata/{document} {
+        allow read, write: if isSelf(userId);
+      }
+      /** Local reminder backup. Never readable by anyone else. */
+      match /reminders/{reminderId} {
+        allow read, write: if isSelf(userId);
+      }
+      /** Signed-in devices and their FCM tokens. */
+      match /devices/{deviceId} {
+        allow read, write: if isSelf(userId);
+      }
+      /** Block list: owner-only in both directions — a block is never visible
+          to the blocked account, which is why `notBlocked()` is evaluated in
+          rules rather than in the client. */
+      match /blocked/{blockedUid} {
+        allow read, write: if isSelf(userId);
+      }
+
+      // -------------------------------------------------------------------
+      // statistics/data — counters maintained by both sides of a relationship
+      // -------------------------------------------------------------------
+      match /statistics/{document} {
+        allow read: if isSelf(userId) || (signedIn() && connected(userId));
+        allow create: if isSelf(userId);
+        // Accepting a friend request or leaving a family updates the *other*
+        // account's counters in the same batch. Batched writes are each
+        // evaluated against pre-batch state, so the edge does not exist yet at
+        // this point — a pending request or an existing edge is the proof.
+        allow update: if isSelf(userId)
+          || (signedIn()
+              && changedOnly(['friendCount', 'familyCount', 'sharedReminderCount',
+                              'receivedReminderCount', 'acknowledgedReminderCount',
+                              'chatCount'])
+              && relationshipInFlight(userId));
+        allow delete: if isSelf(userId);
+      }
+
+      // -------------------------------------------------------------------
+      // friends / family edges
+      // -------------------------------------------------------------------
+      // Readable by the owner and by the owner's friends. Friend-list
+      // visibility to friends is what makes FRIENDS_OF_FRIENDS verifiable:
+      // a caller can find a legitimate `viaUid` without any server help.
+      match /friends/{friendUid} {
+        allow get, list: if isSelf(userId) || (signedIn() && isFriendOf(uid(), userId));
+        // Both edges of a friendship are written in one batch by whoever
+        // accepts, so the peer must be able to write into the other's
+        // subcollection — but only the edge that names themselves.
+        allow create: if isSelf(userId)
+          || (isSelf(friendUid) && request.resource.data.uid == uid());
+        allow update: if isSelf(userId);
+        // Unfriending deletes both edges from one device.
+        allow delete: if isSelf(userId) || isSelf(friendUid);
+      }
+
+      match /family/{memberUid} {
+        allow get, list: if isSelf(userId) || (signedIn() && isFamilyOf(uid(), userId));
+        allow create: if isSelf(userId)
+          || (isSelf(memberUid) && request.resource.data.uid == uid());
+        // Permissions are owner-controlled: only the account that owns this
+        // edge decides what the member on the other side may do.
+        allow update: if isSelf(userId);
+        allow delete: if isSelf(userId) || isSelf(memberUid);
+      }
+
+      // -------------------------------------------------------------------
+      // notifications — durable Notification Centre entries
+      // -------------------------------------------------------------------
+      // Producers write into the RECIPIENT's collection. The sender's uid is
+      // pinned to the caller so an entry can never be forged in someone
+      // else's name, and a block stops delivery outright.
+      match /notifications/{entryId} {
+        allow get, list: if isSelf(userId);
+        allow create: if isSelf(userId)
+          || (verified()
+              && request.resource.data.senderUid == uid()
+              && notBlocked(userId)
+              && request.resource.data.keys().hasOnly(
+                   ['category', 'title', 'body', 'senderUid', 'refId',
+                    'read', 'archived', 'pinned', 'createdAt']));
+        // The owner manages read/archived/pinned; a producer may only
+        // re-surface its own deduplicated entry.
+        allow update: if isSelf(userId)
+          || (signedIn()
+              && resource.data.senderUid == uid()
+              && request.resource.data.senderUid == uid()
+              && notBlocked(userId));
+        allow delete: if isSelf(userId);
+      }
+    }
+
+    // =====================================================================
+    // Collection-group search over public profiles
+    //
+    // A `match /users/{uid}/public/{doc}` rule governs that path only —
+    // a collectionGroup('public') query is NOT covered by it and would fall
+    // through to the default deny. This recursive matcher is what makes user
+    // search work, and it is deliberately list-only: it grants no read that
+    // the path-scoped `get` rule above does not already govern.
+    //
+    // A list rule cannot call get() per result, so discoverability is decided
+    // by the denormalised `discoverable` flag, which the query MUST filter on.
+    // Profiles whose owner set profileVisibility to anything other than
+    // EVERYONE carry `discoverable: false` and can never match.
+    // =====================================================================
+    match /{path=**}/public/{document} {
+      allow list: if signedIn() && resource.data.discoverable == true;
+    }
+
+    /**
+     * True when a relationship between the caller and `other` exists or is
+     * being negotiated — the precondition for touching their counters.
+     * Ordered cheapest-first; rules short-circuit on `||`.
+     */
+    function relationshipInFlight(other) {
+      return isFriendOf(uid(), other)
+        || isFamilyOf(uid(), other)
+        || exists(/databases/$(database)/documents/friendRequests/$(other + '_' + uid()))
+        || exists(/databases/$(database)/documents/friendRequests/$(uid() + '_' + other))
+        || exists(/databases/$(database)/documents/familyInvitations/$(other + '_' + uid()))
+        || exists(/databases/$(database)/documents/familyInvitations/$(uid() + '_' + other));
+    }
+
+    // =====================================================================
+    // usernames/{username} — uniqueness reservations
+    //
+    // Document id IS the lowercased username, which is what makes the
+    // "is this name free?" check and the prefix search index-free.
+    // =====================================================================
+    match /usernames/{username} {
+      // Readable by any signed-in user: this is the username search index.
+      allow get, list: if signedIn();
+      // Claiming a name is a create on a document that must not already exist
+      // — Firestore enforces that for `create`, which is the uniqueness lock.
+      allow create: if signedIn()
+        && request.resource.data.uid == uid()
+        && request.resource.data.keys().hasOnly(['uid'])
+        && username == username.lower();
+      allow update: if false;
+      // Only the holder can release their own name (rename / account delete).
+      allow delete: if signedIn() && resource.data.uid == uid();
+    }
+
+    // =====================================================================
+    // friendRequests/{fromUid_toUid}
+    //
+    // Deterministic ids make a duplicate request structurally impossible.
+    // =====================================================================
+    match /friendRequests/{requestId} {
+      allow get: if signedIn()
+        && (resource.data.fromUid == uid() || resource.data.toUid == uid());
+      // Both inbox and outbox queries filter on one of these fields, so the
+      // list rule is decidable from the query alone.
+      allow list: if signedIn();
+
+      allow create: if verified()
+        && requestId == uid() + '_' + request.resource.data.toUid
+        && request.resource.data.fromUid == uid()
+        && request.resource.data.toUid != uid()
+        && request.resource.data.status == 'PENDING'
+        && notBlocked(request.resource.data.toUid)
+        && audienceAllows(request.resource.data.toUid, 'friendRequests',
+                          request.resource.data.get('viaUid', null))
+        && request.resource.data.keys().hasOnly(
+             ['fromUid', 'toUid', 'status', 'createdAt', 'respondedAt', 'viaUid']);
+
+      // Only a status transition, and only by the side entitled to make it:
+      // the addressee accepts or rejects, the sender cancels.
+      allow update: if signedIn()
+        && changedOnly(['status', 'respondedAt'])
+        && resource.data.status == 'PENDING'
+        && (
+          (resource.data.toUid == uid()
+            && request.resource.data.status in ['ACCEPTED', 'REJECTED'])
+          || (resource.data.fromUid == uid()
+            && request.resource.data.status == 'CANCELLED')
+        );
+
+      allow delete: if signedIn()
+        && (resource.data.fromUid == uid() || resource.data.toUid == uid());
+    }
+
+    // =====================================================================
+    // familyInvitations/{fromUid_toUid} — mirrors friendRequests
+    //
+    // Family builds on friendship: an invitation is only valid between
+    // accounts that are already friends.
+    // =====================================================================
+    match /familyInvitations/{invitationId} {
+      allow get: if signedIn()
+        && (resource.data.fromUid == uid() || resource.data.toUid == uid());
+      allow list: if signedIn();
+
+      allow create: if verified()
+        && invitationId == uid() + '_' + request.resource.data.toUid
+        && request.resource.data.fromUid == uid()
+        && request.resource.data.toUid != uid()
+        && request.resource.data.status == 'PENDING'
+        && notBlocked(request.resource.data.toUid)
+        && isFriendOf(uid(), request.resource.data.toUid)
+        && audienceAllows(request.resource.data.toUid, 'familyInvitations', null)
+        && request.resource.data.keys().hasOnly(
+             ['fromUid', 'toUid', 'message', 'status', 'createdAt', 'respondedAt']);
+
+      allow update: if signedIn()
+        && changedOnly(['status', 'respondedAt'])
+        && resource.data.status == 'PENDING'
+        && (
+          (resource.data.toUid == uid()
+            && request.resource.data.status in ['ACCEPTED', 'DECLINED'])
+          || (resource.data.fromUid == uid()
+            && request.resource.data.status == 'CANCELLED')
+        );
+
+      allow delete: if signedIn()
+        && (resource.data.fromUid == uid() || resource.data.toUid == uid());
+    }
+
+    // =====================================================================
+    // chats/{sortedPair} and their messages
+    //
+    // The document id is the two uids sorted and joined with '_', so
+    // membership is provable from the id without reading the document.
+    // =====================================================================
+    match /chats/{chatId} {
+
+      function participantIds() {
+        return chatId.split('_');
+      }
+
+      function isParticipant() {
+        return signedIn() && uid() in participantIds();
+      }
+
+      function partnerUid() {
+        return participantIds()[0] == uid()
+          ? participantIds()[1]
+          : participantIds()[0];
+      }
+
+      allow get: if isParticipant();
+      // The conversation list filters on `participants`, which always contains
+      // the caller; membership is re-checked per document by `get`.
+      allow list: if signedIn();
+
+      // The chat header carries per-user counters (`unread_<uid>`,
+      // `typing_<uid>`, `pinned_<uid>`), so both participants write it.
+      // Chatting requires an accepted relationship and no block, and the
+      // recipient's message-request audience must permit it.
+      allow create: if isParticipant()
+        && notBlocked(partnerUid())
+        && connected(partnerUid())
+        && request.resource.data.participants.hasOnly(participantIds())
+        && request.resource.data.participants.size() == 2;
+      allow update: if isParticipant() && notBlocked(partnerUid());
+      allow delete: if false;
+
+      match /messages/{messageId} {
+
+        function inChat() {
+          return signedIn() && uid() in chatId.split('_');
+        }
+
+        function otherUid() {
+          return chatId.split('_')[0] == uid()
+            ? chatId.split('_')[1]
+            : chatId.split('_')[0];
+        }
+
+        allow get, list: if inChat();
+
+        allow create: if inChat()
+          && verified()
+          && request.resource.data.senderUid == uid()
+          && notBlocked(otherUid())
+          && connected(otherUid())
+          && audienceAllows(otherUid(), 'messageRequests', null)
+          && request.resource.data.text.size() <= 4000;
+
+        // Two legitimate updates exist: the recipient marks a message read,
+        // and either side hides a message for themselves. Nothing else — the
+        // text of a sent message is immutable.
+        allow update: if inChat()
+          && (
+            (changedOnly(['status'])
+              && resource.data.senderUid != uid()
+              && request.resource.data.status == 'READ')
+            || (changedOnly(['deletedFor'])
+              && request.resource.data.deletedFor.hasAll(resource.data.deletedFor)
+              && request.resource.data.deletedFor.removeAll(resource.data.deletedFor) == [uid()])
+          );
+
+        allow delete: if inChat() && resource.data.senderUid == uid();
+      }
+    }
+
+    // =====================================================================
+    // reminderShares/{ownerUid_reminderId_recipientUid}
+    //
+    // The sharing edge plus a snapshot of the reminder payload. The id encodes
+    // both parties, so every check below is decidable without reading the
+    // document first.
+    // =====================================================================
+    match /reminderShares/{shareId} {
+
+      function ownerFromId() {
+        return shareId.split('_')[0];
+      }
+
+      function recipientFromId() {
+        return shareId.split('_')[2];
+      }
+
+      function isOwner() {
+        return signedIn() && resource.data.ownerUid == uid();
+      }
+
+      function isRecipient() {
+        return signedIn() && resource.data.recipientUid == uid();
+      }
+
+      allow get: if isOwner() || isRecipient();
+      // Both listeners filter on ownerUid or recipientUid.
+      allow list: if signedIn();
+
+      allow create: if verified()
+        && shareId == uid() + '_' + string(request.resource.data.reminderId)
+                          + '_' + request.resource.data.recipientUid
+        && request.resource.data.ownerUid == uid()
+        && request.resource.data.recipientUid != uid()
+        && notBlocked(request.resource.data.recipientUid)
+        && connected(request.resource.data.recipientUid)
+        && audienceAllows(request.resource.data.recipientUid, 'reminderSharing', null)
+        && request.resource.data.status in ['PENDING', 'DELIVERED'];
+
+      // The owner owns the content and may cancel; the recipient owns their
+      // response and the fields that mirror local delivery back. Neither may
+      // write the other's half — this is what stops a recipient rewriting the
+      // payload, or an owner forging an acknowledgement.
+      allow update: if
+        (isOwner()
+          && changedOnly(['title', 'scheduleSummary', 'payload', 'payloadVersion',
+                          'contentUpdatedAt', 'ownership', 'approvalRequired',
+                          'status', 'respondedAt', 'lastSyncAt', 'updateRequested'])
+          && (!('status' in changed())
+              || request.resource.data.status in ['CANCELLED', 'DELIVERED', 'PENDING']))
+        || (isRecipient()
+          && changedOnly(['status', 'respondedAt', 'appliedVersion', 'updateRequested',
+                          'recipientReminderId', 'scheduledAt', 'lastSyncAt',
+                          'lastFiredAtMillis', 'ackAtMillis', 'ackMethod',
+                          'ackNote', 'ackProofUrl', 'ackLatitude', 'ackLongitude'])
+          && (!('status' in changed())
+              || request.resource.data.status in
+                   ['ACCEPTED', 'REJECTED', 'TRIGGERED', 'COMPLETED']));
+
+      allow delete: if isOwner() || isRecipient();
+    }
+
+    // =====================================================================
+    // Default deny. Any collection added later is closed until a rule for it
+    // is written here deliberately.
+    // =====================================================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -21,6 +21,7 @@ import kotlinx.coroutines.delay
 import com.alertnotes.core.ui.components.LocalSecondTicker
 import com.alertnotes.core.ui.theme.AlertNotesTheme
 import com.alertnotes.core.util.SecondTicker
+import com.alertnotes.core.util.AppLocaleManager
 import com.alertnotes.domain.model.ThemeMode
 import com.alertnotes.features.alerts.AlertPresenter
 import com.alertnotes.features.alerts.ReminderAlertHost
@@ -37,16 +38,30 @@ import javax.inject.Inject
 @AndroidEntryPoint
 class AlertActivity : FragmentActivity() {
 
+    // The selected app language must be in place before a single resource is
+    // resolved, which is what attachBaseContext guarantees. No-op on API 33+,
+    // where the platform has already applied the per-app locale.
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(AppLocaleManager.wrap(newBase))
+    }
+
     @Inject
     lateinit var presenter: AlertPresenter
 
     @Inject
     lateinit var secondTicker: SecondTicker
 
+    @Inject
+    lateinit var diagnostics: com.alertnotes.services.ReliabilityDiagnostics
+
     private val mainViewModel: MainViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        diagnostics.log(
+            com.alertnotes.services.ReliabilityDiagnostics.STAGE_FULL_SCREEN,
+            "AlertActivity created (fresh launch)",
+        )
         applyLockScreenFlags(
             showWhenLocked = intent.getBooleanExtra(EXTRA_SHOW_WHEN_LOCKED, true),
             turnScreenOn = intent.getBooleanExtra(EXTRA_TURN_SCREEN_ON, true),

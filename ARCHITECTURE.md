@@ -7,7 +7,7 @@ This document explains how the codebase is structured, why, and how to extend it
 1. **Clean Architecture layering.** UI → ViewModel → Repository interface → data source. Dependencies always point inward; `domain` has no Android UI dependencies.
 2. **Single responsibility.** Every class answers one question. Screens render state; ViewModels own state; repositories own persistence.
 3. **Unidirectional data flow.** Data flows up as `Flow`/`StateFlow`; events flow down as plain function calls. Screens are stateless functions of their `UiState`.
-4. **Offline by design.** There is no network layer and none is planned. Privacy guarantees are structural, not aspirational.
+4. **Offline-first by design.** The reminder engine never needs the network: reminders live in Room and fire from AlarmManager in both modes. Online mode is strictly additive - it adds accounts, friends, family, sharing and chat on top, and is opt-in. Offline mode still opens no connection at all, so that privacy guarantee stays structural rather than aspirational.
 
 ## Layers
 

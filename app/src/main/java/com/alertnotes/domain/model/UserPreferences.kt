@@ -19,6 +19,11 @@ data class UserPreferences(
     /** True once the first-run welcome and permission flow has been finished or skipped. */
     val onboardingCompleted: Boolean = false,
     /**
+     * Offline or online experience. Null until the user has made the
+     * first-launch choice — the mode selection screen shows while unset.
+     */
+    val appMode: AppMode? = null,
+    /**
      * Global pause: no reminder triggers before this instant. Null = not
      * paused; [PAUSE_INDEFINITE] = paused until manually resumed.
      */

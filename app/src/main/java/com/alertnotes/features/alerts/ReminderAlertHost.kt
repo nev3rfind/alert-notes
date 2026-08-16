@@ -23,6 +23,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -39,6 +40,7 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -64,10 +66,13 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import com.alertnotes.services.AcknowledgementSession
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -91,6 +96,7 @@ import com.alertnotes.domain.model.DrawingPosition
 import com.alertnotes.domain.model.FloatingCardSize
 import com.alertnotes.domain.model.Reminder
 import com.alertnotes.domain.model.ReminderDrawing
+import com.alertnotes.domain.model.ReminderPriority
 import com.alertnotes.domain.model.SwipeDirection
 import com.alertnotes.features.drawing.DrawingView
 import java.time.Duration
@@ -108,7 +114,14 @@ import kotlinx.coroutines.launch
 fun ReminderAlertHost(
     viewModel: AlertPresenterViewModel = hiltViewModel(),
 ) {
-    val alert by viewModel.activeAlert.collectAsStateWithLifecycle()
+    val presentedAlert by viewModel.activeAlert.collectAsStateWithLifecycle()
+    val ackPhase by AcknowledgementSession.phase.collectAsStateWithLifecycle()
+    // While a proof capture runs, the reminder is SUSPENDED — no surface may
+    // render it. This host lives in MainActivity, AlertActivity, and the
+    // overlay alike; gating only the dispatcher was not enough, because the
+    // location screen sits in the app's own task with these hosts alive
+    // beneath it — the alert UI "took over" from here, not from a re-launch.
+    val alert = if (ackPhase == AcknowledgementSession.Phase.IDLE) presentedAlert else null
     val activity = LocalActivity.current
     val biometricTitle = stringResource(R.string.biometric_prompt_title)
     val cancelLabel = stringResource(R.string.action_cancel)
@@ -223,6 +236,7 @@ internal fun FullScreenAlert(
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .criticalAttentionEffects(reminder.priority)
                 .clip(MaterialTheme.shapes.extraLarge)
                 .animatedThemeBackground(reminder.theme)
                 .swipeDismissable(
@@ -232,6 +246,7 @@ internal fun FullScreenAlert(
                     onDismissed = { onDismiss(AcknowledgeMethod.SWIPE, null) },
                 ),
         ) {
+            CriticalBadge(priority = reminder.priority)
             // TRAP-PROOF LAYOUT. Root cause of the 100%-drawing soft-lock:
             // everything lived in one centered, unbounded column, so a large
             // drawing pushed the actions off-screen with no way to scroll.
@@ -631,6 +646,30 @@ private fun AlertActions(
                 GestureHint(text = stringResource(R.string.alert_signature_hint), spec = spec)
             }
 
+            AcknowledgementType.PHOTO -> {
+                ProofCaptureButton(
+                    reminderId = reminder.id,
+                    method = AcknowledgeMethod.PHOTO,
+                    mode = com.alertnotes.ProofCaptureActivity.MODE_PHOTO,
+                    label = stringResource(R.string.alert_photo_capture),
+                    spec = spec,
+                    compact = compact,
+                )
+                GestureHint(text = stringResource(R.string.alert_photo_hint), spec = spec)
+            }
+
+            AcknowledgementType.LOCATION -> {
+                ProofCaptureButton(
+                    reminderId = reminder.id,
+                    method = AcknowledgeMethod.LOCATION,
+                    mode = com.alertnotes.ProofCaptureActivity.MODE_LOCATION,
+                    label = stringResource(R.string.alert_location_capture),
+                    spec = spec,
+                    compact = compact,
+                )
+                GestureHint(text = stringResource(R.string.alert_location_hint), spec = spec)
+            }
+
             AcknowledgementType.SWIPE -> {
                 GestureHint(
                     text = stringResource(reminder.swipeDirection.hintRes()),
@@ -663,6 +702,81 @@ private fun AlertActions(
             }
         }
     }
+}
+
+/**
+ * Warning banner pinned to the top of critical alerts — the priority's
+ * badge and icon, unmistakable over any reminder theme.
+ */
+@Composable
+private fun BoxScope.CriticalBadge(priority: ReminderPriority) {
+    if (priority != ReminderPriority.CRITICAL) return
+    Surface(
+        shape = MaterialTheme.shapes.extraLarge,
+        color = MaterialTheme.colorScheme.error,
+        modifier = Modifier
+            .align(Alignment.TopCenter)
+            .padding(top = MaterialTheme.spacing.medium)
+            .zIndex(1f),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(
+                horizontal = MaterialTheme.spacing.medium,
+                vertical = MaterialTheme.spacing.extraSmall,
+            ),
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Warning,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onError,
+                modifier = Modifier.size(16.dp),
+            )
+            Text(
+                text = stringResource(R.string.alert_critical_badge),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onError,
+                modifier = Modifier.padding(start = MaterialTheme.spacing.extraSmall),
+            )
+        }
+    }
+}
+
+/**
+ * Proof-capture acknowledgement (camera or location). The capture runs in
+ * [com.alertnotes.ProofCaptureActivity] — a NORMAL-launchMode task, because
+ * this singleInstance alert activity cannot receive cross-task results —
+ * and the outcome returns through [AcknowledgementSession]. Completion is
+ * handled by the PRESENTER (process level), never here: this button leaves
+ * the composition the moment the alert suspends for capture, so a local
+ * collector would miss the confirmation entirely. Cancelling returns to
+ * the alert exactly as it was.
+ */
+@Composable
+private fun ProofCaptureButton(
+    reminderId: Long,
+    method: AcknowledgeMethod,
+    mode: String,
+    label: String,
+    spec: ReminderThemeSpec,
+    compact: Boolean,
+) {
+    val context = LocalContext.current
+    AlertPillButton(
+        label = label,
+        enabled = true,
+        spec = spec,
+        compact = compact,
+        onClick = {
+            // One workflow at a time: a second tap (or a second method)
+            // while a capture is running is ignored.
+            if (AcknowledgementSession.begin(reminderId)) {
+                context.startActivity(
+                    com.alertnotes.ProofCaptureActivity.intent(context, reminderId, mode),
+                )
+            }
+        },
+    )
 }
 
 /** Inverted pill: content-colored fill, theme-accent label. */

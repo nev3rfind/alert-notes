@@ -91,13 +91,31 @@ class ReminderSchedulingCoordinator @Inject constructor(
                 return
             }
             val now = timeProvider.now()
-            // Spurious-fire guard: if this occurrence was already handled
-            // (e.g. by the missed-occurrence recovery on app start racing the
-            // alarm broadcast), the stored trigger is already well in the
-            // future — enqueueing again would alert the user twice.
-            val due = reminder.nextTriggerAt ?: now
+            // Spurious-fire guard, in three parts. The recovery sweep in
+            // rescheduleAll() runs from Application.onCreate and frequently
+            // wins the mutex before the alarm broadcast that woke the process
+            // is dispatched, so by the time we get here the occurrence may
+            // already have been queued.
+            //
+            // 1. No stored trigger at all means there is nothing left to fire.
+            //    This used to read `?: now`, which turned "already handled"
+            //    into "due right now" and enqueued a one-time reminder twice —
+            //    two alerts and two history rows for one occurrence.
+            val due = reminder.nextTriggerAt ?: run {
+                logger.w(TAG, "Alarm for $reminderId has no stored trigger — already handled")
+                return
+            }
+            // 2. The stored trigger is already well in the future.
             if (due > now.plusSeconds(SPURIOUS_FIRE_SLACK_SECONDS)) {
                 logger.w(TAG, "Alarm for $reminderId already handled (next at $due) — skipping")
+                return
+            }
+            // 3. This exact occurrence has already been recorded. A snooze is
+            //    safe here: it writes a trigger strictly later than
+            //    lastTriggeredAt, so a snoozed alarm still passes.
+            val lastTriggered = reminder.lastTriggeredAt
+            if (lastTriggered != null && lastTriggered >= due) {
+                logger.w(TAG, "Alarm for $reminderId already recorded at $lastTriggered — skipping")
                 return
             }
             if (settingsRepository.preferences.first().isPaused(now)) {

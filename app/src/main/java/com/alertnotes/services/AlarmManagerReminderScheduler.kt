@@ -32,6 +32,7 @@ import javax.inject.Singleton
 class AlarmManagerReminderScheduler @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val logger: AppLogger,
+    private val diagnostics: ReliabilityDiagnostics,
 ) : ReminderScheduler {
 
     private val alarmManager: AlarmManager? = context.getSystemService<AlarmManager>()
@@ -49,10 +50,18 @@ class AlarmManagerReminderScheduler @Inject constructor(
                 pendingIntent,
             )
             logger.d(TAG, "Scheduled alarm-clock alarm for reminder $reminderId at $triggerAt")
+            diagnostics.log(
+                ReliabilityDiagnostics.STAGE_SCHEDULED,
+                "Reminder $reminderId: alarm-clock alarm at $triggerAt",
+            )
         } catch (securityException: SecurityException) {
             // Extremely defensive: some OEM builds gate this — degrade, don't crash.
             alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
             logger.w(TAG, "Alarm-clock scheduling denied for $reminderId — fell back to inexact", securityException)
+            diagnostics.log(
+                ReliabilityDiagnostics.STAGE_SCHEDULED,
+                "Reminder $reminderId: exact alarm DENIED, inexact fallback at $triggerAt",
+            )
         }
     }
 

@@ -1,6 +1,11 @@
 package com.alertnotes.core.ui.components
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -13,10 +18,14 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import com.alertnotes.R
+import com.alertnotes.core.navigation.RailDestination
 import com.alertnotes.core.navigation.TopLevelDestination
 
 /**
- * Bottom navigation used on compact (phone) layouts.
+ * Bottom navigation used on compact (phone) layouts. [onExit], when set,
+ * appends a trailing action item that closes the app UI — an action, never
+ * a destination, so it never renders as selected.
  */
 @Composable
 fun AppBottomNavigationBar(
@@ -24,6 +33,7 @@ fun AppBottomNavigationBar(
     isSelected: (TopLevelDestination) -> Boolean,
     onNavigate: (TopLevelDestination) -> Unit,
     modifier: Modifier = Modifier,
+    onExit: (() -> Unit)? = null,
 ) {
     NavigationBar(
         modifier = modifier,
@@ -48,41 +58,78 @@ fun AppBottomNavigationBar(
                 ),
             )
         }
+        if (onExit != null) {
+            NavigationBarItem(
+                selected = false,
+                onClick = onExit,
+                icon = {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Outlined.Logout,
+                        contentDescription = null,
+                    )
+                },
+                label = { Text(text = stringResource(R.string.nav_exit)) },
+            )
+        }
     }
 }
 
 /**
- * Navigation rail used on medium and expanded (tablet / landscape) layouts,
- * so wide screens don't get a stretched phone bottom bar.
+ * Left navigation rail used on medium and expanded (tablet / landscape)
+ * layouts, so wide screens don't get a stretched phone bottom bar. Carries
+ * the full [RailDestination] set — wide screens have the vertical room for
+ * every primary surface — with the destinations scrollable (short landscape
+ * windows must never clip them) and Exit pinned at the bottom as an action,
+ * never a destination.
  */
 @Composable
 fun AppNavigationRail(
-    destinations: List<TopLevelDestination>,
-    isSelected: (TopLevelDestination) -> Boolean,
-    onNavigate: (TopLevelDestination) -> Unit,
+    destinations: List<RailDestination>,
+    isSelected: (RailDestination) -> Boolean,
+    onNavigate: (RailDestination) -> Unit,
     modifier: Modifier = Modifier,
+    onExit: (() -> Unit)? = null,
 ) {
     NavigationRail(
         modifier = modifier.fillMaxHeight(),
         containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
-        destinations.forEach { destination ->
-            val selected = isSelected(destination)
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState()),
+        ) {
+            destinations.forEach { destination ->
+                val selected = isSelected(destination)
+                NavigationRailItem(
+                    selected = selected,
+                    onClick = { onNavigate(destination) },
+                    icon = {
+                        Icon(
+                            imageVector = if (selected) destination.selectedIcon else destination.unselectedIcon,
+                            contentDescription = null,
+                        )
+                    },
+                    label = { Text(text = stringResource(destination.labelRes)) },
+                    colors = NavigationRailItemDefaults.colors(
+                        selectedIconColor = MaterialTheme.colorScheme.primary,
+                        selectedTextColor = MaterialTheme.colorScheme.primary,
+                        indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                    ),
+                )
+            }
+        }
+        if (onExit != null) {
             NavigationRailItem(
-                selected = selected,
-                onClick = { onNavigate(destination) },
+                selected = false,
+                onClick = onExit,
                 icon = {
                     Icon(
-                        imageVector = if (selected) destination.selectedIcon else destination.unselectedIcon,
+                        imageVector = Icons.AutoMirrored.Outlined.Logout,
                         contentDescription = null,
                     )
                 },
-                label = { Text(text = stringResource(destination.labelRes)) },
-                colors = NavigationRailItemDefaults.colors(
-                    selectedIconColor = MaterialTheme.colorScheme.primary,
-                    selectedTextColor = MaterialTheme.colorScheme.primary,
-                    indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
-                ),
+                label = { Text(text = stringResource(R.string.nav_exit)) },
             )
         }
     }
